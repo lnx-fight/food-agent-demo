@@ -17,6 +17,10 @@ const state = {
   ingredients: ['鸡胸肉','番茄','鸡蛋','米饭']
 };
 
+// GitHub Pages 无法运行 Node.js 服务端。部署到 github.io（或本地带 ?demo=1 预览）时，
+// 仅使用明确标注的预置演示响应，真实服务端部署保持原有 API 行为。
+const DEMO_MODE=location.hostname.endsWith('.github.io')||new URLSearchParams(location.search).has('demo');
+
 const STORAGE_KEY = 'fitpilot_user_v3';
 let userData = null;
 let onboardingStep = 1;
@@ -97,7 +101,7 @@ $('#generateRecipeBtn').addEventListener('click',async()=>{
   out.innerHTML=`<div class="agent-working"><span class="loader"></span><div><strong>正在规划一份可执行食谱</strong><p>读取营养缺口 → 匹配食材 → 校验热量</p></div></div>`;
   addToolEvent('lookup_nutrition',`查询${state.ingredients.length}种现有食材`);
   try{
-    const mealType=suggestedMealType(),futureDay=state.activeMealDayOffset===1,pantry=$$('input[name="diyPantry"]:checked').map(input=>input.value),d=await apiFetch('/api/recipes/diy',{method:'POST',body:JSON.stringify({ingredients:state.ingredients,pantry,customFoods:[...diyCustomFoods.values()],cookTime:$('#cookTime').value,cookTools:$('#cookTools').value,mealType,dayOffset:futureDay?1:0,profile:userData?.profile||{},today:futureDay?{calories:0,protein:0,meals:[]}:{calories:state.calories,protein:state.protein,meals:todayMeals()}})}),r=d.result.recipe,n=r.nutrition,targets=d.result.targets,source=d.result.generatedBy==='qwen'?'千问规划＋数据库校验':'规则规划＋数据库校验';
+    const mealType=suggestedMealType(),futureDay=state.activeMealDayOffset===1,pantry=$$('input[name="diyPantry"]:checked').map(input=>input.value),d=await apiFetch('/api/recipes/diy',{method:'POST',body:JSON.stringify({ingredients:state.ingredients,pantry,customFoods:[...diyCustomFoods.values()],cookTime:$('#cookTime').value,cookTools:$('#cookTools').value,mealType,dayOffset:futureDay?1:0,profile:userData?.profile||{},today:futureDay?{calories:0,protein:0,meals:[]}:{calories:state.calories,protein:state.protein,meals:todayMeals()}})}),r=d.result.recipe,n=r.nutrition,targets=d.result.targets,source=DEMO_MODE?'预置演示方案':d.result.generatedBy==='qwen'?'千问规划＋数据库校验':'规则规划＋数据库校验';
     addToolEvent('compose_home_recipe',`${source} · 匹配${d.result.matched.length}种食材`);addToolEvent('calculate_recipe_nutrition',`${n.kcal} kcal`);
     const ingredients=(r.ingredients||[]).map(x=>`<li>${escapeHtml(x.name)} ${x.grams}g <small>· ${x.kcal} kcal</small></li>`).join(''),steps=(r.steps||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('');
     out.innerHTML=`<div class="lookup-status success">${mealDayLabel()}${escapeHtml(targets.mealType)}动态预算约 ${targets.mealKcal} kcal<span class="api-source">全天 ${targets.dailyTarget} kcal · 已摄入 ${targets.consumedKcal} kcal · 为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal</span></div><div class="recipe-result"><div class="recipe-cover"><div><small>真实食材匹配 · ${escapeHtml(source)}</small><h3>${escapeHtml(r.name)}</h3><p>使用现有食材 · 预计${Number(r.minutes)||20}分钟</p></div><span>约 ${n.kcal} kcal</span></div><div class="recipe-body"><div class="recipe-macros"><span>蛋白质 ${n.protein}g</span><span>碳水 ${n.carbs}g</span><span>脂肪 ${n.fat}g</span></div><div class="recipe-columns"><div><h4>食材与克数</h4><ul>${ingredients}</ul></div><div><h4>烹饪步骤</h4><ol>${steps}</ol></div></div><div class="confirm-row"><strong>加入${mealDayLabel()}${escapeHtml(targets.mealType)}</strong><button id="acceptRecipe">采用这份食谱</button></div></div></div>`;
@@ -191,7 +195,7 @@ async function runDailyReview(){
   try{const d=await apiFetch('/api/agent/review',{method:'POST',body:JSON.stringify({clientId:CLIENT_ID})});if(d.result?.adjustment!=null){userData.profile.budgetAdjustmentKcal=d.result.adjustment;updateDashboard()}localStorage.setItem('fitpilot_reviewed_'+localDateKey(),'1')}catch(e){}
 }
 function connectAgentEvents(){
-  if(!userData||typeof EventSource==='undefined')return;
+  if(DEMO_MODE||!userData||typeof EventSource==='undefined')return;
   try{
     const es=new EventSource(`/api/agent/events?clientId=${encodeURIComponent(CLIENT_ID)}`);
     es.addEventListener('agent',e=>{
@@ -491,14 +495,15 @@ handleAgentPrompt = async function(prompt){
   if(!userData)return showToast('请先完成建档');const historyForModel=agentConversation.slice(-24).map(({role,content})=>({role,content})),now=new Date().toISOString();addMessage(prompt,true);agentConversation.push({role:'user',content:prompt,createdAt:now});persistAgentConversation();const typing=document.createElement('div');typing.className='message agent-message';typing.innerHTML=`<span class="agent-orb tiny"></span><div><p>正在读取长期记忆、近期对话和真实记录…</p></div>`;$('#chatMessages').appendChild(typing);$('#chatMessages').scrollTop=$('#chatMessages').scrollHeight;
   try{
     const d=await apiFetch('/api/agent/chat',{method:'POST',body:JSON.stringify({message:prompt,history:historyForModel,profile:userData.profile,weightLogs:userData.weightLogs||[],todayMeals:todayMeals(),pendingMeal:currentPendingMeal(),clientId:CLIENT_ID})}),r=d.result;for(const tool of r.trace||[])addToolEvent(tool,tool==='qwen_chat'?'模型已生成回答':'已读取真实状态');typing.remove();const answer=r.answer;
-    const proposal=r.proposal||null,meta=`真实LLM · ${r.intent||'general'}`,responseMessage=addMessage(answer,false,meta);if(proposal)addProposalControls(responseMessage,proposal);agentConversation.push({role:'assistant',content:answer,action:proposal?{type:'proposal_'+proposal.kind,kind:proposal.kind,payload:proposal.payload}:r.action||null,meta,createdAt:new Date().toISOString()});if(agentConversation.length>100)agentConversation.splice(0,agentConversation.length-100);persistAgentConversation();const cuisine=r.action?.cuisine||'';if(cuisine)state.mealRequest=cuisine;if(r.action?.mealType)setActiveMealType(r.action.mealType,r.action.dayOffset);state.restaurantRadius=Math.min(5000,Math.max(100,Number(r.action?.radiusMeters)||3000));state.restaurantArea=String(r.action?.area||'').trim();state.restaurantRequestedCount=Math.min(20,Math.max(1,Number(r.action?.requestedCount)||5));if(r.action?.type==='open_meal_choice')addInlineMealChoices(responseMessage,r.action);else if(['open_diy','open_restaurants','open_manual_log'].includes(r.action?.type))addInlineToolEntry(responseMessage,r.action)
+    const proposal=r.proposal||null,meta=DEMO_MODE?`预置演示 · ${r.intent||'general'}`:`真实LLM · ${r.intent||'general'}`,responseMessage=addMessage(answer,false,meta);if(proposal)addProposalControls(responseMessage,proposal);agentConversation.push({role:'assistant',content:answer,action:proposal?{type:'proposal_'+proposal.kind,kind:proposal.kind,payload:proposal.payload}:r.action||null,meta,createdAt:new Date().toISOString()});if(agentConversation.length>100)agentConversation.splice(0,agentConversation.length-100);persistAgentConversation();const cuisine=r.action?.cuisine||'';if(cuisine)state.mealRequest=cuisine;if(r.action?.mealType)setActiveMealType(r.action.mealType,r.action.dayOffset);state.restaurantRadius=Math.min(5000,Math.max(100,Number(r.action?.radiusMeters)||3000));state.restaurantArea=String(r.action?.area||'').trim();state.restaurantRequestedCount=Math.min(20,Math.max(1,Number(r.action?.requestedCount)||5));if(r.action?.type==='open_meal_choice')addInlineMealChoices(responseMessage,r.action);else if(['open_diy','open_restaurants','open_manual_log'].includes(r.action?.type))addInlineToolEntry(responseMessage,r.action)
   }catch(e){typing.remove();const errorText=`真实模型调用失败：${e.message}`;addMessage(errorText,false,'服务错误');agentConversation.push({role:'assistant',content:errorText,meta:'服务错误',createdAt:new Date().toISOString()});persistAgentConversation()}
 };
 
 userData=loadUser();
+if(DEMO_MODE){document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;}
 if(userData){$('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation()}else{initOnboarding()}
 loadServerUser();pollAgent();runDailyReview();connectAgentEvents();
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 const adjustGoalForm=$('#adjustGoalForm');
 function dateAfterDays(days){const date=new Date();date.setHours(12,0,0,0);date.setDate(date.getDate()+Math.max(1,+days||1));return localDateKey(date)}
@@ -514,7 +519,63 @@ let serviceStatus={qwen:false,usda:false,amap:false,openFoodFacts:true};
 const portionForm=$('#manualMealForm'),portionInput=portionForm.elements.grams,portionLabel=portionInput.closest('label'),portionControl=document.createElement('div'),portionUnit=document.createElement('select');
 portionUnit.name='unit';portionUnit.setAttribute('aria-label','份量单位');portionUnit.innerHTML='<option value="g">g</option><option value="ml">ml</option>';portionControl.className='portion-control';portionControl.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:end';portionInput.replaceWith(portionControl);portionControl.append(portionInput,portionUnit);portionLabel.firstChild.textContent='大约份量';
 $('#manualMealForm').elements.protein.step='0.1';
+function demoPayload(options={}){try{return options.body?JSON.parse(options.body):{}}catch{return {}}}
+function demoFood(name='鸡胸肉'){
+  const key=String(name).trim(),catalog={
+    '鸡胸肉':{kcal:133,protein:24.6,fat:2.8,carbs:0},'鸡蛋':{kcal:144,protein:13.3,fat:8.8,carbs:2.8},'番茄':{kcal:18,protein:.9,fat:.2,carbs:3.9},'米饭':{kcal:116,protein:2.6,fat:.3,carbs:25.9},'西兰花':{kcal:36,protein:4.1,fat:.6,carbs:4.3},'燕麦':{kcal:367,protein:15,fat:6.7,carbs:61.6},'三文鱼':{kcal:208,protein:20.4,fat:13.4,carbs:0},'豆腐':{kcal:81,protein:8.1,fat:4.2,carbs:2.0}
+  },hit=catalog[key]||catalog['鸡胸肉'];
+  return {name:key||'鸡胸肉',category:'演示食材',per100g:hit,source:{type:'预置演示营养数据',url:null},confidence:'medium'};
+}
+function demoTargets({profile={},today={},mealType='' }={}){
+  const type=normalizeClientMealType(mealType)||mealTypeByTime(),dailyTarget=Math.max(1200,Math.round(Number(state.theoreticalTarget)||Number(state.energyTarget)||1500)),consumed=Math.max(0,Math.round(Number(today.calories)||0)),remaining=Math.max(0,dailyTarget-consumed),index=['早餐','午餐','晚餐'].indexOf(type),futureMeals=['早餐','午餐','晚餐'].slice(Math.max(0,index+1));
+  return {mealType:type,dailyTarget,consumedKcal:consumed,remainingKcal:remaining,reservedKcal:Math.round(remaining*.45),mealKcal:Math.max(280,Math.round(remaining/(futureMeals.length+1))),futureMeals,budgetStatus:remaining<250?'low':'normal'};
+}
+function demoRecipe(payload={}){
+  const names=(Array.isArray(payload.ingredients)?payload.ingredients:[]).map(x=>String(x).trim()).filter(Boolean).slice(0,4),selected=(names.length?names:['鸡胸肉','番茄','鸡蛋','米饭']).map((name,index)=>{const food=demoFood(name),grams=[120,140,55,100][index]||80;return {name:food.name,grams,kcal:Math.round(food.per100g.kcal*grams/100),protein:+(food.per100g.protein*grams/100).toFixed(1),fat:+(food.per100g.fat*grams/100).toFixed(1),carbs:+(food.per100g.carbs*grams/100).toFixed(1)}});
+  const nutrition=selected.reduce((sum,item)=>({kcal:sum.kcal+item.kcal,protein:sum.protein+item.protein,fat:sum.fat+item.fat,carbs:sum.carbs+item.carbs}),{kcal:0,protein:0,fat:0,carbs:0});
+  nutrition.protein=+nutrition.protein.toFixed(1);nutrition.fat=+nutrition.fat.toFixed(1);nutrition.carbs=+nutrition.carbs.toFixed(1);
+  return {recipe:{name:`${selected[0].name}彩蔬能量碗`,minutes:20,ingredients:selected,steps:['将主食材切成适口大小，少油煎熟或焯熟。','加入蔬菜与主食材翻拌，按个人口味调味。','装盘后按实际食用量确认记录。']},nutrition,matched:selected.map(x=>x.name),targets:demoTargets({profile:payload.profile,today:payload.today,mealType:payload.mealType}),generatedBy:'demo'};
+}
+function demoDailyPlan(payload={}){
+  const targets=demoTargets({profile:payload.profile,today:payload.today,mealType:'午餐'}),planned=[
+    {type:'早餐',mealKcal:360,name:'燕麦鸡蛋酸奶碗',description:'优先补足蛋白质并控制精制糖。',diy:{name:'燕麦鸡蛋酸奶碗',ingredients:['燕麦 40g','鸡蛋 1 个','无糖酸奶 150g'],steps:['燕麦加热','搭配鸡蛋与酸奶']},status:'planned'},
+    {type:'午餐',mealKcal:480,name:'鸡胸肉彩蔬饭',description:'以高蛋白主菜搭配蔬菜与适量主食。',diy:{name:'鸡胸肉彩蔬饭',ingredients:['鸡胸肉 120g','番茄 140g','米饭 100g'],steps:['煎熟鸡胸肉','翻炒番茄','与米饭搭配']},status:'planned'},
+    {type:'晚餐',mealKcal:420,name:'豆腐西兰花拌饭',description:'晚餐保留蛋白质，减少额外油脂。',diy:{name:'豆腐西兰花拌饭',ingredients:['豆腐 150g','西兰花 150g','米饭 80g'],steps:['焯熟西兰花','煎豆腐','拌入米饭']},status:'planned'}
+  ];
+  return {dailyTarget:targets.dailyTarget,consumedKcal:targets.consumedKcal,remainingKcal:targets.remainingKcal,otherConsumedKcal:0,generatedBy:'demo',meals:planned};
+}
+function demoRestaurants(payload={}){
+  const target=demoTargets({profile:payload.profile,today:payload.today,mealType:payload.mealType}),restaurants=[['轻食实验室','演示路 88 号',420,'香煎鸡胸肉藜麦沙拉',428,36],['谷物食堂','演示路 126 号',680,'番茄牛肉饭（少饭）',465,31],['暖碗餐吧','演示路 208 号',930,'豆腐菌菇荞麦面',392,24]];
+  return {targets:target,results:restaurants.slice(0,Math.max(1,Math.min(Number(payload.requestedCount)||3,3))).map((item,index)=>({name:item[0],address:item[1],distance:item[2],location:'121.4737,31.2304',recommendation:{mode:'demo',label:'预置演示数据',mealStructure:item[3],dishes:[item[3]],reason:'按本餐预留热量、蛋白质优先和演示偏好排序。',personalization:{mealDisplay:item[3],kcal:item[4],protein:item[5],confidence:'medium',hours:{label:'演示营业时间 10:00–21:00'},score:96-index*3},sources:[]}}))};
+}
+function demoAgentReply(payload={}){
+  const message=String(payload.message||''),mealType=mealTypeByTime(),outside=/外卖|餐馆|餐厅|附近|堂食/.test(message),diy=/做饭|食材|冰箱|家里|DIY/.test(message),action=outside?{type:'open_restaurants',mealType,radiusMeters:3000,requestedCount:3}:diy?{type:'open_diy',mealType}:{type:'open_meal_choice',mealType};
+  const answer=outside?'这是预置演示响应：已根据今日可用热量和高蛋白优先级准备附近外食方案。你可以打开“附近外食”查看排序结果。':diy?'这是预置演示响应：已读取你当前的食材与本餐预算，可以打开“在家 DIY”查看可确认的食谱方案。':'这是预置演示响应：我会先读取档案、今日饮食和预算，再让你选择在家 DIY 或附近外食；页面中的 Tool 轨迹可查看该流程。';
+  return {answer,intent:'meal_recommendation',action,trace:['read_user_state','get_meal_budget',outside?'rank_restaurants':'compose_home_recipe']};
+}
+async function demoApi(url,options={}){
+  await new Promise(resolve=>setTimeout(resolve,120));
+  const path=String(url).split('?')[0],payload=demoPayload(options),now=new Date().toISOString();
+  if(path==='/api/health')return {ok:true,demo:true,services:{qwen:false,usda:false,amap:false,openFoodFacts:false}};
+  if(path==='/api/user/state')return {ok:true,state:null};
+  if(path==='/api/agent/memory')return {ok:true,demo:true};
+  if(path==='/api/agent/check')return {ok:true,tasks:[]};
+  if(path==='/api/agent/review')return {ok:true,result:{adjustment:0,decidedBy:'demo',message:'面试演示模式不修改预算'}};
+  if(path==='/api/agent/logs')return {ok:true,logs:[{kind:'agent_skill',detail:'meal-recommendation:demo-hit',createdAt:now},{kind:'agent_tool',detail:'read_user_state:ok',createdAt:now},{kind:'agent_tool',detail:'get_meal_budget:ok',createdAt:now},{kind:'agent_tool',detail:'compose_home_recipe:ok',createdAt:now},{kind:'agent_chat_done',detail:'预置演示流程完成',createdAt:now}]};
+  if(path==='/api/recipes/diy')return {ok:true,result:demoRecipe(payload)};
+  if(path==='/api/plans/daily-meals')return {ok:true,result:demoDailyPlan(payload)};
+  if(path==='/api/agent/chat')return {ok:true,result:demoAgentReply(payload)};
+  if(path==='/api/meals/analyze')return {ok:true,trace:['demo_vision_response','demo_nutrition_match'],result:{dishName:'鸡胸肉藜麦沙拉（预置演示）',foods:[{name:'鸡胸肉',portionGrams:120,nutrition:demoFood('鸡胸肉')},{name:'番茄',portionGrams:100,nutrition:demoFood('番茄')},{name:'米饭',portionGrams:80,nutrition:demoFood('米饭')}],uncertainties:['图片未实际上传到服务端，结果为预置示例'],followUpQuestion:'演示模式下可继续确认记录，真实图片识别需连接服务端。',suggestedMealType:mealTypeByTime(),recordDate:localDateKey()}};
+  if(path==='/api/nutrition/search'){const name=new URL(String(url),location.origin).searchParams.get('q')||'鸡胸肉',food=demoFood(name);return {ok:true,result:food,trace:['demo_local_nutrition']};}
+  if(path.startsWith('/api/nutrition/barcode/'))return {ok:true,result:{name:'预置演示轻食餐',brand:'小饭 Demo',per100g:{kcal:128,protein:11.5,fat:4.2,carbs:12.8},basis:'100g',nutritionSource:'demo_data',matchedReference:'预置演示营养数据',servingSize:'220g'}};
+  if(path==='/api/nutrition/web-search')return {ok:true,result:{name:payload.query||'预置演示餐食',kcal:320,protein:24,basis:'serving',confidence:'medium',sourceTitle:'预置演示数据（未发起网页检索）',sourceUrl:'',notes:['GitHub Pages 演示模式不访问外部网页或密钥服务']}};
+  if(path==='/api/location/geocode')return {ok:true,result:{lat:31.2304,lng:121.4737,formattedAddress:`${new URL(String(url),location.origin).searchParams.get('address')||'演示地点'}（预置坐标）`}};
+  if(path==='/api/restaurants/nearby')return {ok:true,results:[{name:'轻食实验室',address:'演示路 88 号',distance:420,location:'121.4737,31.2304'},{name:'谷物食堂',address:'演示路 126 号',distance:680,location:'121.4737,31.2304'},{name:'暖碗餐吧',address:'演示路 208 号',distance:930,location:'121.4737,31.2304'}]};
+  if(path==='/api/restaurants/recommendations')return {ok:true,...demoRestaurants(payload)};
+  return {ok:true,demo:true};
+}
 async function apiFetch(url,options={}){
+  if(DEMO_MODE)return demoApi(url,options);
   const response=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await response.json().catch(()=>({error:'服务返回了无效数据'}));if(!response.ok)throw Object.assign(new Error(data.error||`请求失败 ${response.status}`),{status:response.status,data});return data;
 }
 async function checkServices(){try{const d=await apiFetch('/api/health');serviceStatus=d.services;return d}catch{return null}}
@@ -552,6 +613,7 @@ function fileToDataUrl(file){return new Promise((resolve,reject)=>{const r=new F
 
 
 function requestGeolocation(){
+  if(DEMO_MODE)return Promise.resolve({latitude:31.2304,longitude:121.4737,source:'demo'});
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation){reject(new Error('当前浏览器不支持定位，可直接输入所在城市/商圈搜索'));return}
     navigator.geolocation.getCurrentPosition(pos=>resolve({latitude:pos.coords.latitude,longitude:pos.coords.longitude}),err=>{
@@ -562,7 +624,7 @@ function requestGeolocation(){
   });
 }
 
-// Real browser geolocation + AMap POI search. No fake restaurant fallback.
+// 真实部署使用浏览器定位与高德 POI；GitHub Pages 演示模式使用明确标注的预置餐馆结果。
 startRestaurantSearch = async function(cuisine='',mealType=suggestedMealType(),dayOffset=state.activeMealDayOffset,radius=state.restaurantRadius||3000,area='',requestedCount=state.restaurantRequestedCount||5){
   setActiveMealType(mealType,dayOffset);
   openModal('outsideModal');const fb0=$('#locationFallback');if(fb0)fb0.hidden=true;$('#restaurantResults').innerHTML='';$('#restaurantLoading').style.display='flex';$('#loadingText').textContent='等待位置授权…';addToolEvent('browser_geolocation','请求本次位置');

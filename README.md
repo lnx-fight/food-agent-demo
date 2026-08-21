@@ -4,11 +4,11 @@
 
 ## 在线体验
 
-> 部署后将下方链接中的 `<你的 Render 服务名>` 替换为 Render 创建的实际服务名。
+> 首次发布后，请在 GitHub 仓库的 **Settings → Pages** 中选择 `main` 分支和 `/(root)` 目录；GitHub 完成部署后即可访问。
 
-[打开小饭 Web Demo](https://<你的%20Render%20服务名>.onrender.com)
+[打开小饭面试演示](https://lnx-fight.github.io/food-agent-demo/)
 
-演示覆盖 Skill 路由、餐食场景识别、端到端入口、多轮任务与受控 Tool 调用；相应评测脚本和用例位于 `scripts/` 与 `test/fixtures/`。
+演示覆盖 Skill 路由、餐食场景识别、端到端入口、多轮任务与受控 Tool 调用；相应评测脚本和用例位于 `scripts/` 与 `test/fixtures/`。GitHub Pages 版本会明确显示“面试演示模式”，所有数据保存在浏览器中，Agent、图片识别、营养检索和附近餐馆均为预置响应，不会调用外部 API 或暴露密钥。
 
 它的核心用户是：有明确减重目标、希望通过饮食减重，但每天难以在热量限制内决定"下一顿吃什么"的人——他们需要小饭根据口味和忌口，算好可直接确认的下一餐答案。
 
@@ -21,6 +21,18 @@ npm start
 ```
 
 然后访问 <http://localhost:8080>。如需调整端口，可在启动前设置 `PORT`。
+
+## 发布面试演示到 GitHub Pages
+
+本仓库根目录已包含静态入口文件，GitHub Pages 会自动启用面试演示模式：页面不请求 `/api/*`，而是使用前端预置响应完成 DIY 食谱、营养查询、餐厅推荐、图片记录和 Agent 对话的交互流程。
+
+1. 将本次改动推送到 `main` 分支；
+2. 打开 GitHub 仓库的 **Settings → Pages**；
+3. 在 **Build and deployment** 中选择 **Deploy from a branch**；
+4. Branch 选择 `main`，目录选择 `/(root)`，点击 **Save**；
+5. 等待 GitHub 显示网址 `https://lnx-fight.github.io/food-agent-demo/`，打开后确认页面顶部出现“面试演示模式”。
+
+该模式适合展示产品界面、受控流程与本地交互，不替代真实模型、视觉识别、位置服务或服务端持久化。若以后恢复完整在线服务，可继续使用下文的 Render 部署方案。
 
 ## 部署为在线 Demo（Render）
 
