@@ -1,5 +1,6 @@
 // 小饭 PWA Service Worker：应用外壳缓存优先，API 一律走网络
-const CACHE='xiaofan-v7';
+// 修改应用壳文件时同步递增版本，避免缓存优先策略继续提供旧版 app.js。
+const CACHE='xiaofan-v9';
 const SHELL=['./','./index.html','./styles.css','./app.js','./pantry.css','./onboarding.css','./api.css','./record-status.css'];
 
 self.addEventListener('install',event=>{

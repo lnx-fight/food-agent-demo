@@ -469,7 +469,12 @@ async function executeAgentTool(tool,args,ctx){
       const mealType=normalizeMealType(args.mealType);if(!mealType)return {...trace,ok:false,result:{error:'餐次无效，请询问用户要记录到早餐/午餐/晚餐还是其他摄入'}};
       const today=shanghaiClock().date,rawDate=String(args.recordDate||''),minDate=String(new Date(Date.now()-7*86400000).toISOString().slice(0,10));
       const recordDate=/^\d{4}-\d{2}-\d{2}$/.test(rawDate)&&rawDate<=today&&rawDate>=minDate?rawDate:today;
-      return {...trace,result:{action:'confirm_meal_record',payload:{name:String(args.name||'').slice(0,100),calories:Math.max(0,Math.round(Number(args.calories)||0)),protein:Math.max(0,+((Number(args.protein)||0).toFixed(1))),mealType,recordDate,source:String(args.source||'agent估算')}}};
+      const originalMessage=String(args.originalMessage||ctx.message||args.name||''),hasExplicitEnergy=/(\d+(?:\.\d+)?)\s*(?:kcal|千卡|卡路里|卡)/i.test(originalMessage);
+      const estimate=!hasExplicitEnergy?estimateTextMealRecord(originalMessage):null;
+      if(estimate&&!estimate.ok)return {...trace,ok:false,result:{error:estimate.error}};
+      const calories=estimate?estimate.calories:Math.round(Number(args.calories)||0),protein=estimate?estimate.protein:+((Number(args.protein)||0).toFixed(1)),recordName=estimate?estimate.name:String(args.name||'').trim();
+      if(!recordName||calories<=0)return {...trace,ok:false,result:{error:'缺少可靠的餐食热量估算；请补充每种食物的份量、克数或包装营养信息后再生成记录提案'}};
+      return {...trace,result:{action:'confirm_meal_record',payload:{name:recordName.slice(0,100),calories,protein:Math.max(0,protein),mealType,recordDate,source:String(estimate?.source||args.source||'用户文字记录').slice(0,120)}}};
     }
     if(name==='revise_pending_meal'){
       const calories=Math.max(0,Math.round(Number(args.revisedCalories)||0));if(calories<=0)return {...trace,ok:false,result:{error:'补充信息不足以形成可靠的新热量估算，请询问用户更多细节'}};
@@ -492,10 +497,50 @@ function mentionedFoodNames(message='',limit=8){
   const rows=db.prepare('SELECT name,term FROM (SELECT name,name AS term FROM foods UNION ALL SELECT f.name,a.alias AS term FROM aliases a JOIN foods f ON f.id=a.food_id) ORDER BY length(term) DESC').all();
   return [...new Set(rows.filter(row=>String(row.term||'').length>=2&&text.includes(String(row.term||''))).map(row=>String(row.name||'')))].slice(0,limit);
 }
+function chineseQuantity(value=''){
+  const text=String(value).trim();if(/^\d+$/.test(text))return Number(text);
+  const map={一:1,二:2,两:2,俩:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10};
+  if(map[text]!=null)return map[text];
+  if(/^十[一二三四五六七八九]$/.test(text))return 10+map[text[1]];
+  if(/^[二三四五六七八九]十$/.test(text))return map[text[0]]*10;
+  return 1;
+}
+function splitTextMealItems(message=''){
+  const text=String(message||'').replace(/\s+/g,'').trim(),matched=text.match(/(?:吃了|吃的|吃|喝了|喝的|喝)\s*(.+)$/),body=(matched?matched[1]:text).split(/[。！？；;]/)[0];
+  return body.split(/(?:还有|以及|加上|、|，|,|和|跟|及)/).map(part=>part.trim()).filter(Boolean).map(part=>{
+    const grams=part.match(/^(\d+(?:\.\d+)?)\s*(?:g|克)\s*(.+)$/i);if(grams)return {name:grams[2].trim(),quantity:1,grams:Number(grams[1]),unit:'克'};
+    const quantity=part.match(/^([\d一二两三四五六七八九十俩]+)\s*(个|只|份|颗|枚)?\s*(.+)$/);
+    return quantity?{name:quantity[3].trim(),quantity:Math.max(1,chineseQuantity(quantity[1])),grams:null,unit:quantity[2]||'份'}:{name:part,quantity:1,grams:null,unit:'份'};
+  });
+}
+function matchTextMealFood(name=''){
+  const clean=String(name||'').replace(/[，。；;！!？?]/g,'').trim();if(!clean)return null;
+  const fallback=[[/牛肉包|猪肉包|鲜肉包|肉包/, '肉包子'],[/菜包|素包/, '菜包子'],[/豆沙包|红豆包/, '豆沙包']].find(([pattern])=>pattern.test(clean));
+  if(fallback)return localFoodSearch(fallback[1]);
+  return localFoodSearch(clean);
+}
+function defaultTextMealGrams(food,name=''){
+  const text=String(name||'');
+  if(/鸡蛋/.test(text)&&!/鸡蛋灌饼/.test(text))return 50;
+  if(/小笼/.test(text)||/小笼包/.test(String(food?.name||'')))return 30;
+  if(/包/.test(text)||/包子/.test(String(food?.name||'')))return 100;
+  return null;
+}
+function estimateTextMealRecord(message=''){
+  const items=splitTextMealItems(message);if(!items.length)return {ok:false,error:'没有识别到可记录的食物，请补充吃了什么和每种食物的份量'};
+  const resolved=[],unmatched=[];
+  for(const item of items){const food=matchTextMealFood(item.name),grams=item.grams||defaultTextMealGrams(food,item.name);if(!food||!grams){unmatched.push(item.name);continue}resolved.push({...item,food,grams:Number(grams)*item.quantity});}
+  if(unmatched.length)return {ok:false,error:`无法从本地营养库可靠估算：${unmatched.join('、')}；请补充克数、包装营养信息，或改用手动记录`};
+  const calories=Math.round(resolved.reduce((sum,item)=>sum+(Number(item.food.kcal)||0)*item.grams/100,0)),protein=+(resolved.reduce((sum,item)=>sum+(Number(item.food.protein)||0)*item.grams/100,0)).toFixed(1);
+  if(calories<=0)return {ok:false,error:'未能形成可靠热量估算，请补充食物份量或营养信息'};
+  const name=resolved.map(item=>`${item.name} ${item.quantity}${item.unit}`).join('、'),basis=resolved.map(item=>`${item.name}按${item.grams/item.quantity}g/${item.unit}`).join('；');
+  return {ok:true,name,calories,protein,source:`本地营养库文字估算（${basis}）`,items:resolved.map(item=>({name:item.name,matchedFood:item.food.name,grams:item.grams}))};
+}
 function explicitToolForMessage(message='',pendingMeal=null){
   const text=String(message||'');
   if(pendingMeal&&/改|修正|调整|补充/.test(text))return 'revise_pending_meal';
   if(isMealRecordRequest(text))return 'propose_meal_record';
+  if(isNearbyRestaurantRequest(text))return 'search_nearby_restaurants';
   if(/用户状态工具/.test(text))return 'read_user_state';
   if(/(?:本餐|餐次)预算工具/.test(text))return 'get_meal_budget';
   if(/食谱生成工具/.test(text))return 'compose_diy_recipe';
@@ -504,20 +549,34 @@ function explicitToolForMessage(message='',pendingMeal=null){
   if(/记忆工具/.test(text))return 'get_memory';
   return '';
 }
+function isNearbyRestaurantRequest(message=''){
+  const text=String(message||'');
+  return /附近|周边|周围/.test(text)&&/(?:吃|餐|饭|店|外卖)/.test(text);
+}
+function normalizeBrowserLocation(value=null){
+  const latitude=Number(value?.latitude),longitude=Number(value?.longitude);
+  if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||latitude<-90||latitude>90||longitude<-180||longitude>180)return null;
+  return {latitude,longitude};
+}
 function controlledToolArgs(tool,message,ctx){
   const text=String(message||''),foods=mentionedFoodNames(text),kcalMatches=[...text.matchAll(/(\d+(?:\.\d+)?)\s*(?:kcal|千卡|卡路里|卡)/ig)].map(match=>Number(match[1])).filter(Number.isFinite),proteinMatch=text.match(/蛋白质(?:改为|约|为)?\s*(\d+(?:\.\d+)?)/),mealType=normalizeMealType(text.match(/早餐|午餐|晚餐|其他摄入/)?.[0])||ctx.mealType;
   if(tool==='get_meal_budget')return {mealType,dayOffset:ctx.dayOffset};
   if(tool==='compose_diy_recipe')return {ingredients:foods,pantry:[],cookTime:text.match(/(\d+\s*分钟)/)?.[1]||'20分钟',cookTools:/空气炸锅/.test(text)?'空气炸锅':'普通厨具',mealType};
   if(tool==='search_nutrition')return {name:foods[0]||text.match(/查询(?:一下)?(.{2,20}?)(?:每|的|热量|蛋白质)/)?.[1]?.trim()||''};
-  if(tool==='search_nearby_restaurants')return {area:text.match(/(?:在|到)(.{2,30}?)(?:附近|周边)/)?.[1]?.trim()||'',cuisine:''};
+  if(tool==='search_nearby_restaurants')return {area:text.match(/(?:在|到)(.{2,30}?)(?:附近|周边)/)?.[1]?.trim()||'',cuisine:'',...(ctx.browserLocation||{})};
   if(tool==='get_restaurant_menu')return {restaurant:{name:text.match(/(?:餐厅|饭店|店)\s*([^，。；;]{1,30})/)?.[1]?.trim()||''}};
   if(tool==='personalize_restaurant')return {restaurant:{},menu:{},mealType};
   if(tool==='propose_meal_record'){
     const name=text.match(/(?:吃了|吃的)\s*([^，。；;]+)/)?.[1]?.replace(/约\s*\d+.*$/,'').trim()||foods[0]||'用户餐食';
-    return {name,calories:kcalMatches.at(-1)||0,protein:Number(proteinMatch?.[1])||0,mealType,recordDate:shanghaiClock().date,source:'用户文字记录'};
+    return {name,calories:kcalMatches.at(-1)||0,protein:Number(proteinMatch?.[1])||0,mealType,recordDate:shanghaiClock().date,source:'用户文字记录',originalMessage:text};
   }
   if(tool==='revise_pending_meal')return {revisedName:ctx.pendingMeal?.name||'',revisedCalories:kcalMatches.at(-1)||0,revisedProtein:Number(proteinMatch?.[1])||0,revisionNote:text.slice(0,300)};
   return {};
+}
+function executionArgsForLog(tool,args={}){
+  if(tool!=='search_nearby_restaurants')return args;
+  const {latitude,longitude,...safeArgs}=args||{};
+  return Number.isFinite(Number(latitude))&&Number.isFinite(Number(longitude))?{...safeArgs,locationSource:'browser_authorized'}:safeArgs;
 }
 async function dispatchControlledTools(tools,message,ctx){
   const toolLog=[],results=[];let proposal=null;
@@ -938,6 +997,11 @@ async function runAgentRound({message,history,system,ctx,correctionNote='',trace
       trace.push(out.ok?`tool:${out.tool}`:`tool:${out.tool}(失败)`);
       messages.push({role:'assistant',content:null,tool_calls:[call]});
       messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(out.result||{})});
+      if(!out.ok&&call.function?.name==='propose_meal_record'){
+        result=mealRecordFailureResult(out.result?.error,ctx);
+        trace.push('record_proposal_blocked');
+        break;
+      }
       if(!out.ok&&call.function?.name==='search_nearby_restaurants'&&/缺少|位置|区域|高德/.test(out.result?.error||'')){
         result={
           answer:'我还没有拿到你的位置或区域。请告诉我常点外卖的区域（例如：北京朝阳区国贸、上海静安寺、广州天河体育中心等），或点下方“附近餐厅”手动输入城市/商圈后搜索。',
@@ -953,6 +1017,15 @@ async function runAgentRound({message,history,system,ctx,correctionNote='',trace
   if(!result)throw new Error('Agent未能在限定轮次内完成任务');
   return {result,proposal,toolLog,trace};
 }
+function mealRecordFailureResult(error='',ctx={}){
+  const reason=String(error||'无法形成可靠的营养估算').slice(0,300);
+  return {
+    answer:`这餐尚未记录。原因：${reason}。请通过“记录一餐”手动补充每项食物的克数、包装营养信息或你确认的总热量后再保存。`,
+    intent:'meal_record',
+    action:{type:'open_manual_log',mealType:normalizeMealType(ctx.mealType)||'其他摄入',recordDate:shanghaiClock().date,portionRatio:1,radiusMeters:3000,requestedCount:5,area:'',cuisine:''},
+    planSummary:''
+  };
+}
 async function agentLoop(input){
   const message=String(input.message||'').trim();
   const profile=input.profile||{};
@@ -965,27 +1038,29 @@ async function agentLoop(input){
   const budgetMeals=dayOffset?[]:meals;
   const today={calories:budgetMeals.reduce((s,x)=>s+(Number(x.calories)||0),0),protein:budgetMeals.reduce((s,x)=>s+(Number(x.protein)||0),0),meals:budgetMeals.map(x=>({type:x.type,name:x.name,calories:x.calories,protein:x.protein,status:x.status||'eaten'}))};
   const targets=mealTargets(profile,today,mealType);
-  const ctx={clientId:String(input.clientId||''),profile,today,mealType,dayOffset,cuisine:'',targets,pendingMeal,consumed:{calories:today.calories,protein:today.protein},recentConfirmed:recentConfirmedNames(input.clientId,10)};
+  const ctx={clientId:String(input.clientId||''),message,profile,today,mealType,dayOffset,cuisine:'',browserLocation:normalizeBrowserLocation(input.location),targets,pendingMeal,consumed:{calories:today.calories,protein:today.protein},recentConfirmed:recentConfirmedNames(input.clientId,10)};
   const executionGoal=beginExecutionGoal(ctx.clientId,profile,message,AGENT_CONFIG.maxToolRounds);
   const memory=memorySummaries(ctx.clientId,7);
-  let memoryHits=[];try{memoryHits=await searchMemory(ctx.clientId,message,5)}catch(e){console.warn(`memory search failed: ${e.message}`)}
+  const memorySearch=searchMemory(ctx.clientId,message,5).catch(e=>{console.warn(`memory search failed: ${e.message}`);return []});
+  const routeSearch=routeDescription(message).catch(e=>{console.warn(`agent route failed: ${e.message}`);return null});
   logAgent(ctx.clientId,'agent_chat_start',message.slice(0,200));
-  let route=null;
-  try{route=await routeDescription(message)}catch(e){console.warn(`agent route failed: ${e.message}`)}
+  const [memoryHits,routeResult]=await Promise.all([memorySearch,routeSearch]);
+  let route=routeResult;
   route=route||{skills:[],intent:'other',mealScenario:'',mode:'fallback'};
   const routeSkills=(Array.isArray(route.skills)?route.skills:[]).filter(name=>SKILL_INDEX.some(skill=>skill.name===name));
   const routeIntent=normalizeRouterIntent(route.intent,message,routeSkills);
   const routeMode=route.mode||'fallback';
-  const scenarioResolution=await resolveMealScenario({...route,intent:routeIntent,skills:routeSkills},message);
-  const mealScenario=scenarioResolution.mealScenario;
-  const routerAction=routerActionFor(routeIntent,mealScenario);
+  const scenarioSearch=resolveMealScenario({...route,intent:routeIntent,skills:routeSkills},message);
   const skillContext=[];
   for(const name of routeSkills){
     const skill=SKILL_INDEX.find(item=>item.name===name);if(!skill)continue;
     const core=loadSkillCore(skill);
     if(core.files.length)skillContext.push({skill,core});
   }
-  let plan=null;try{plan=await planAgentTask(message,skillContext)}catch(e){console.warn(`agent plan failed: ${e.message}`)}
+  const planSearch=planAgentTask(message,skillContext).catch(e=>{console.warn(`agent plan failed: ${e.message}`);return null});
+  const [scenarioResolution,plan]=await Promise.all([scenarioSearch,planSearch]);
+  const mealScenario=scenarioResolution.mealScenario;
+  const routerAction=routerActionFor(routeIntent,mealScenario);
   const plannedTools=(Array.isArray(plan?.steps)?plan.steps:[]).map(step=>String(step.tool||'').trim()).filter(name=>AGENT_TOOLS.some(tool=>tool.function?.name===name));
   const explicitTool=explicitToolForMessage(message,pendingMeal);
   const requiredTools=explicitTool?[explicitTool]:[...new Set(plannedTools)];
@@ -1005,7 +1080,7 @@ async function agentLoop(input){
   const routingContext=routerAction?`\n\n【餐食入口】\nRouter 已识别场景 ${mealScenario}，将直接为前端展示 ${routerAction}。请只围绕该场景生成建议与调用 Tool；不要决定前端入口，最终 action.type 返回 "none"。`:'';
   let dispatched=await dispatchControlledTools(requiredTools,message,ctx);
   let stepNo=0;
-  for(const entry of dispatched.results)recordExecutionStep(executionGoal,++stepNo,entry.tool,entry.args,{tool:entry.tool,ok:entry.ok,result:entry.result},'返回可用于推进目标的结构化结果');
+  for(const entry of dispatched.results)recordExecutionStep(executionGoal,++stepNo,entry.tool,executionArgsForLog(entry.tool,entry.args),{tool:entry.tool,ok:entry.ok,result:entry.result},'返回可用于推进目标的结构化结果');
   let replanAttempted=false;
   const failedDispatch=dispatched.results.find(entry=>!entry.ok);
   if(failedDispatch&&!explicitTool&&stepNo<AGENT_CONFIG.maxToolRounds){
@@ -1017,7 +1092,7 @@ async function agentLoop(input){
       if(recoveryTool){
         const recovery=await dispatchControlledTools([recoveryTool],message,ctx);
         dispatched={toolLog:[...dispatched.toolLog,...recovery.toolLog],results:[...dispatched.results,...recovery.results],proposal:recovery.proposal||dispatched.proposal};
-        for(const entry of recovery.results)recordExecutionStep(executionGoal,++stepNo,entry.tool,entry.args,{tool:entry.tool,ok:entry.ok,result:entry.result},'替代步骤应解除上一工具失败造成的阻塞');
+        for(const entry of recovery.results)recordExecutionStep(executionGoal,++stepNo,entry.tool,executionArgsForLog(entry.tool,entry.args),{tool:entry.tool,ok:entry.ok,result:entry.result},'替代步骤应解除上一工具失败造成的阻塞');
       }
     }catch(error){logAgent(ctx.clientId,'agent_goal_replan_failed',error.message)}
   }
@@ -1028,14 +1103,23 @@ async function agentLoop(input){
   const systemBase=`${baseWithSkill}${routingContext}${dispatchContext}`;
   const contextText=buildAgentContext(ctx,{memory,memoryHits});
   let system=`${systemBase}\n上下文：${contextText}`;
-  let outcome=await runAgentRound({message,history,system,ctx,traceSeed:trace,proposalSeed:dispatched.proposal});
+  const explicitRecordFailure=explicitTool==='propose_meal_record'?dispatched.results.find(entry=>entry.tool==='propose_meal_record'&&!entry.ok):null;
+  let outcome=explicitRecordFailure
+    ?{result:mealRecordFailureResult(explicitRecordFailure.result?.error,ctx),proposal:dispatched.proposal||null,toolLog:[],trace:[...trace,'record_proposal_blocked']}
+    :await runAgentRound({message,history,system,ctx,traceSeed:trace,proposalSeed:dispatched.proposal});
   const toolLog=[...dispatched.toolLog,...outcome.toolLog];
   let result=outcome.result,proposal=outcome.proposal||dispatched.proposal;
+  const recordProposalFailure=toolLog.find(entry=>entry.tool==='propose_meal_record'&&!entry.ok);
+  const recordProposalBlocked=isMealRecordRequest(message)&&!proposal&&!!recordProposalFailure;
+  if(recordProposalBlocked){
+    result=mealRecordFailureResult(recordProposalFailure.summary,ctx);
+    trace.push('record_proposal_blocked');
+  }
   let agentIntent=bucketIntent(result?.intent);
   let correctionAttempted=false;
   const routeMissedMeal=routeIntent==='other'&&agentIntent==='meal';
   const intentConflict=checkIntentConflict(routeIntent,agentIntent);
-  if(routeMissedMeal||intentConflict){
+  if(!recordProposalBlocked&&(routeMissedMeal||intentConflict)){
     const correction=buildSkillCorrection(routeIntent,agentIntent,appliedSkills.map(item=>item.skill.name),systemBase);
     if(correction.note){
       correctionAttempted=true;
@@ -1262,4 +1346,4 @@ if(process.env.NODE_ENV!=='test'){
 }
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,`http://${req.headers.host||'localhost'}`);if(url.pathname.startsWith('/api/')){const handled=await api(req,res,url);if(handled===false)return json(res,404,{error:'API not found'});return}staticFile(req,res,url)}catch(e){console.error(e);if(!res.headersSent)json(res,500,{error:e.message})}});
 if(process.env.NODE_ENV!=='test'){server.listen(PORT,()=>console.log(`小饭 running at http://localhost:${PORT}`));}
-export {weightTrend,mealTargets,cosineSimilarity,normalizeMealType,inferMealType,goalState,syncGoal,rateAllowed,schedulerTick,createAgentTask,pendingTasks,PROMPT_VERSION,PROMPTS_VERSION,SYSTEM_BASE,buildAgentContext,sanitizePlanSteps,agentChat,parseSkillFrontmatter,scanSkills,loadSkillContent,routeDescription,normalizeRouterIntent,detectMealScenario,bucketIntent,isValidMealScenario,expectedMealAction,routerActionFor,selectActionType,hasScenarioSignal,checkIntentConflict,selectSkillReferences,loadSkillCore,buildSkillCorrection,isMealRecordRequest,beginExecutionGoal,recordExecutionStep,finishExecutionGoal,executionGoal,executionGoals};
+export {weightTrend,mealTargets,cosineSimilarity,normalizeMealType,inferMealType,goalState,syncGoal,rateAllowed,schedulerTick,createAgentTask,pendingTasks,PROMPT_VERSION,PROMPTS_VERSION,SYSTEM_BASE,buildAgentContext,sanitizePlanSteps,agentChat,parseSkillFrontmatter,scanSkills,loadSkillContent,routeDescription,normalizeRouterIntent,detectMealScenario,bucketIntent,isValidMealScenario,expectedMealAction,routerActionFor,selectActionType,hasScenarioSignal,checkIntentConflict,selectSkillReferences,loadSkillCore,buildSkillCorrection,isMealRecordRequest,isNearbyRestaurantRequest,normalizeBrowserLocation,controlledToolArgs,executionArgsForLog,mealRecordFailureResult,beginExecutionGoal,recordExecutionStep,finishExecutionGoal,executionGoal,executionGoals,estimateTextMealRecord};
