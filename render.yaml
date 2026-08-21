@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: xiaofan-demo
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm run check
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: USDA_API_KEY
+        sync: false
+      - key: AMAP_WEB_SERVICE_KEY
+        sync: false
+      - key: QWEN_VISION_MODEL
+        value: qwen3-vl-flash
+      - key: QWEN_WEB_MODEL
+        value: qwen-plus
+      - key: QWEN_CHAT_MODEL
+        value: qwen-plus
+      - key: QWEN_BASE_URL
+        value: https://dashscope.aliyuncs.com/compatible-mode/v1
+      - key: QWEN_EMBED_MODEL
+        value: text-embedding-v3
+      - key: AGENT_MAX_TOOL_ROUNDS
+        value: "6"

@@ -1,0 +1,16 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data and backups
+data/*.sqlite
+data/*.sqlite-*
+backups/
+
+# Dependencies, logs, and editor/system files
+node_modules/
+coverage/
+*.log
+.DS_Store
+

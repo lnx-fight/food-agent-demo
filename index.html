@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="小饭 — 有记忆、会规划、能调用工具的个人减脂 Agent Demo" />
+  <meta name="theme-color" content="#1d6b55" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="小饭" />
+  <title>小饭 · 个人减脂 Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="pantry.css" />
+  <link rel="stylesheet" href="onboarding.css" />
+  <link rel="stylesheet" href="api.css" />
+  <link rel="stylesheet" href="record-status.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"><span>F</span></div>
+        <div><strong>小饭</strong><small>减脂 Agent</small></div>
+      </div>
+
+      <nav class="nav-list" aria-label="主导航">
+        <button class="nav-item active" data-view="today"><span class="nav-icon">⌁</span>今日</button>
+        <button class="nav-item" data-view="agent"><span class="nav-icon">✦</span>Agent 对话<i class="live-dot"></i></button>
+        <button class="nav-item" data-view="trend"><span class="nav-icon">↗</span>体重</button>
+        <button class="nav-item" data-view="meals"><span class="nav-icon">◌</span>饮食</button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="agent-status-card">
+        <div class="status-row"><span class="agent-orb small"></span><strong>Agent 在线</strong></div>
+        <p>正在关注你的体重趋势和今日摄入</p>
+        <div class="memory-meter"><span style="width:72%"></span></div>
+        <small>已形成 14 天记忆</small>
+      </div>
+      <button class="profile-row" id="profileBtn">
+        <span class="avatar">我</span><span><strong>我的测试档案</strong><small>22岁女性 · 157.5 cm</small></span><span>•••</span>
+      </button>
+      <button class="reset-link" id="restartBtn">↻ 重新开始 / 清除本地数据</button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="打开菜单">☰</button>
+        <div class="date-block"><small>2026年8月17日 · 星期一</small><strong id="pageTitle">今日计划</strong></div>
+        <div class="top-actions">
+          <button class="icon-btn" id="notificationBtn" aria-label="提醒">♢<i></i></button>
+        </div>
+      </header>
+
+      <section class="view active" id="todayView">
+        <div class="hero-grid">
+          <article class="agent-brief">
+            <div class="brief-top">
+              <span class="agent-orb"><i></i></span>
+              <div><small>FITPILOT AGENT</small><h1>早上好</h1></div>
+              <span class="status-pill success">目标需复核</span>
+            </div>
+            <p class="brief-copy" id="agentBrief">正在根据当前体重、活动水平、目标体重和剩余日期计算理论热量计划。</p>
+            <div class="brief-reason"><span>✦</span><p><strong>目标提示</strong><br><span id="briefReason">建议优先保持规律饮食并关注身体状态</span></p></div>
+          </article>
+
+          <article class="goal-card">
+            <div class="card-heading"><span>理论目标进度</span><small>计划周期 15 天</small></div>
+            <div class="goal-main"><strong id="currentWeight">47.0</strong><span>kg</span><small>当前 BMI 18.95</small></div>
+            <div class="progress-track"><span style="width:0%"></span></div>
+            <div class="goal-labels"><span>正常范围低端</span><span>44 kg · BMI 17.74</span></div>
+          </article>
+        </div>
+
+        <div class="metrics-grid" style="grid-template-columns:1fr 1fr">
+          <article class="metric-card">
+            <div class="metric-head"><span class="metric-icon peach">◒</span><span>今日饮食记录</span><small id="calorieTargetSummary">加载理论目标…</small></div>
+            <div class="calorie-ring" style="--p:37"><div><strong id="calConsumed">688</strong><small>已摄入 kcal</small></div></div>
+            <div class="split-label"><span><i class="dot coral"></i><b id="calorieRemainingSummary">计算剩余热量…</b></span><span id="calorieProgressSummary">已记录</span></div>
+            <div class="calorie-plan-note"><span id="theoreticalCalorieSummary">按指定日期反推：计算中</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-head"><span class="metric-icon blue">P</span><span>蛋白质</span><small>参考目标 70g</small></div>
+            <div class="protein-row"><strong id="proteinConsumed">42</strong><span>g</span><small>还需约 28g</small></div>
+            <div class="progress-track blue-track"><span style="width:60%"></span></div>
+            <p class="tip-line">下一餐预算会根据今日记录动态调整</p>
+          </article>
+        </div>
+
+        <article class="panel record-status-panel" id="recordStatusPanel">
+          <div class="panel-head"><div><small>RECORD STATUS</small><h2>昨日记录</h2></div><span class="status-pill">正在检查</span></div>
+          <div class="record-status-grid"></div>
+        </article>
+
+        <article class="panel daily-meal-plan" id="dailyMealPlan">
+          <div class="panel-head"><div><small>TODAY'S MEAL PLAN</small><h2>今日餐食推荐</h2></div><span class="status-pill" id="dailyMealPlanStatus">正在生成</span></div>
+          <p class="daily-meal-plan-summary" id="dailyMealPlanSummary">正在根据今日理论目标和已记录饮食分配三餐…</p>
+          <div class="daily-meal-plan-grid" id="dailyMealPlanGrid"></div>
+        </article>
+
+        <div class="section-heading"><div><small>FOCUS FOR TODAY</small><h2>今日行动</h2></div><span><b id="taskDoneCount">1</b> / 3 已完成</span></div>
+        <div class="tasks-grid">
+          <article class="task-card done" data-task="breakfast"><button class="check">✓</button><div><small>07:42 已完成</small><h3>记录今日早餐</h3><p>拍照或手动记录，蛋白质优先</p></div><span class="task-tag">饮食记录</span></article>
+          <article class="task-card" data-task="lunch"><button class="check"></button><div><small>早餐、午餐和晚餐</small><h3>规划你的下一餐</h3><p>其他摄入仅在记录后扣减剩余热量</p></div><button class="task-action" id="lunchBtn">帮我选 →</button></article>
+          <article class="task-card" data-task="walk"><button class="check"></button><div><small>建议晚饭后</small><h3>步行 25 分钟</h3><p>低强度即可，不需要追求配速</p></div><span class="task-tag muted">约 2,500 步</span></article>
+        </div>
+
+        <div class="content-grid">
+          <article class="panel meal-panel">
+            <div class="panel-head"><div><small>TODAY'S MEALS</small><h2>今日饮食</h2></div><button id="addMealBtn">＋ 记录一餐</button></div>
+            <div class="meal-list" id="mealList">
+              <div class="meal-row empty"><span class="meal-emoji breakfast">☀</span><div><strong>早餐</strong><p>未记录</p></div></div>
+              <div class="meal-row empty"><span class="meal-emoji lunch">◐</span><div><strong>午餐</strong><p>未记录</p></div></div>
+              <div class="meal-row empty"><span class="meal-emoji dinner">☾</span><div><strong>晚餐</strong><p>未记录</p></div></div>
+            </div>
+          </article>
+
+          <article class="panel trace-panel">
+            <div class="panel-head"><div><small>TODAY'S GUIDANCE</small><h2>今日建议</h2></div><span class="running"><i></i>已更新</span></div>
+            <div class="trace-list" id="traceList">
+              <div class="trace-item"><span class="trace-icon">↗</span><div><strong>安排今日三餐</strong><p>按剩余热量预算分配早餐、午餐和晚餐</p><small>记录后自动计算今日缺口</small></div><b>今日</b></div>
+              <div class="trace-item"><span class="trace-icon">⌁</span><div><strong>保证规律三餐</strong><p>每餐优先安排蛋白质、蔬菜和适量主食</p><small>完成记录后自动计算今日缺口</small></div><b>建议</b></div>
+              <div class="trace-item"><span class="trace-icon">✦</span><div><strong>选择下一餐</strong><p>可以生成在家食谱，或搜索附近餐馆</p><small>推荐会结合今天已经吃过的食物</small></div><b>待办</b></div>
+            </div>
+            <button class="trace-expand" id="openAgentBtn">和 Agent 讨论今日计划 →</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="agentView">
+        <div class="agent-layout">
+          <article class="chat-panel">
+            <div class="chat-header"><div class="status-row"><span class="agent-orb small"></span><div><strong>小饭</strong><small><i class="online-dot"></i>拥有你的14天健康记忆</small></div></div><div class="chat-actions"><button id="openAgentLogs">工具日志</button><button id="clearChat">清空对话</button></div></div>
+            <div class="chat-messages" id="chatMessages">
+              <div class="message agent-message"><span class="agent-orb tiny"></span><div><p>早上好，今天继续按计划执行。饮食尽量保证优质蛋白质和规律三餐；今天还没安排的餐次，我可以帮你生成食谱或找附近餐馆。</p><small>今日计划已更新 · 07:43</small></div></div>
+            </div>
+            <div class="suggestion-chips">
+              <button>我中午吃什么？</button><button>帮我记午餐</button><button>附近有什么吃的？</button><button>今天在家做饭</button>
+            </div>
+            <div class="chat-image-attachment" id="chatImageAttachment" hidden><img id="chatImageThumb" alt="待分析食物图片"><div><strong id="chatImageName">已选择图片</strong><small>可在输入框补充菜名、重量、餐具大小或烹饪方式</small></div><button type="button" id="removeChatImage">×</button></div>
+            <form class="chat-input" id="chatForm"><button type="button" id="uploadInChat" title="上传食物图片">＋</button><input type="file" id="chatMealImage" accept="image/*" hidden><input id="chatInput" placeholder="提问，或上传图片后补充菜名、份量等…" autocomplete="off"><button type="submit">发送 ↗</button></form>
+          </article>
+          <aside class="agent-console">
+            <div class="console-head"><div><small>AGENT CONSOLE</small><h2>思考与工具</h2></div></div>
+            <div class="agent-state">
+              <h3>当前目标</h3>
+              <div class="state-row"><span>档案</span><strong>22岁女性 · 157.5cm</strong></div>
+              <div class="state-row"><span>目标</span><strong>47 → 44 kg / 15天</strong></div>
+              <div class="state-row"><span>策略</span><strong>理论热量计划</strong></div>
+            </div>
+            <div class="memory-box"><div class="memory-title"><span>◫</span><strong>长期记忆</strong><small>5项</small></div><div class="memory-tags"><span>22岁女性</span><span>久坐</span><span>常吃高热量食品</span><span>可在家DIY</span><span>计划15天</span></div></div>
+            <div class="tool-events" id="toolEvents">
+              <h3>最近调用</h3>
+              <div><span class="tool-ok">✓</span><p><strong>calculate_bmi</strong><small>当前18.95 / 目标17.74 · 42ms</small></p></div>
+              <div><span class="tool-ok">✓</span><p><strong>calculate_theoretical_plan</strong><small>已计算理论热量目标 · 18ms</small></p></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="trendView">
+        <div class="view-intro"><div><small>WEIGHT</small><h1>体重</h1><p>记录并查看每日体重；系统使用趋势而不是单日数字做判断。</p></div><div class="top-actions"><button class="secondary-btn" id="adjustGoalBtn">调整目标</button><button class="primary-btn" id="logWeightBtn">＋ 记录体重</button></div></div>
+        <div class="trend-summary"><article><small>当前体重</small><strong>47.0 <i>kg</i></strong><span>当前 BMI 18.95</span></article><article><small>理论目标速度</small><strong>1.4 <i>kg/周</i></strong><span>按剩余日期反推</span></article><article><small>目标BMI</small><strong>17.74</strong><span>由目标体重计算</span></article></div>
+        <article class="panel chart-panel"><div class="panel-head"><div><h2>14日变化</h2><p>实线为每日体重，虚线为目标趋势</p></div><div class="legend"><span><i class="line actual"></i>实际</span><span><i class="line target"></i>目标</span></div></div><div class="main-chart" id="mainChart"></div></article>
+        <article class="insight-card"><div><small>AGENT INSIGHT</small><h3>理论计划会随最新体重更新</h3><p>记录新体重后，系统会重新计算BMR、TDEE、剩余目标差值和每日理论摄入。</p></div></article>
+      </section>
+
+      <section class="view" id="mealsView">
+        <div class="view-intro"><div><small>MEAL INTELLIGENCE</small><h1>饮食与食谱</h1><p>手动记录、Agent拍照估算、在家DIY，或者从附近餐馆中选择。</p></div><div class="top-actions"><button class="primary-btn compact" id="quickLogBtn">＋ 快速记录</button></div></div>
+        <div class="meal-mode-grid">
+          <button class="mode-card diy" data-meal-mode="diy"><span>⌂</span><div><small>AT HOME</small><h2>在家 DIY</h2><p>用现有食材生成一份适合今天的食谱</p></div><b>开始 →</b></button>
+          <button class="mode-card outside" data-meal-mode="outside"><span>⌖</span><div><small>NEARBY</small><h2>外食推荐</h2><p>根据位置、预算和营养缺口选择</p></div><b>开始 →</b></button>
+        </div>
+        <article class="panel meal-history-panel">
+          <div class="panel-head meal-history-head"><div><small>MEAL HISTORY</small><h2>饮食记录</h2></div><div class="meal-history-controls"><button type="button" id="mealHistoryPrev" aria-label="前一天">‹</button><input type="date" id="mealHistoryDate"><button type="button" id="mealHistoryNext" aria-label="后一天">›</button><button type="button" id="mealHistoryToday">今天</button></div></div>
+          <div class="meal-history-summary" id="mealHistorySummary">正在读取记录…</div>
+          <div class="meal-history-list" id="mealHistoryList"></div>
+          <button class="secondary-btn" type="button" id="mealHistoryAdd">＋ 补登这一天的饮食</button>
+        </article>
+        <div class="content-grid meal-detail-grid">
+          <article class="panel"><div class="panel-head"><div><small>TODAY</small><h2>营养进度</h2></div><span class="status-pill" id="nutritionProgressStatus">尚未记录</span></div><div class="macro-list"><div><span>热量</span><strong id="mealCalorieText">0 / 0 kcal</strong><i><b id="mealCalorieProgress" style="width:0%"></b></i><small id="mealCalorieRemaining">等待计划数据</small></div><div><span>蛋白质</span><strong id="mealProteinText">0 / 0 g</strong><i><b id="mealProteinProgress" style="width:0%"></b></i></div><div><span>膳食纤维</span><strong>尚未统计</strong><i><b style="width:0%"></b></i></div><div><span>饮水</span><strong>尚未统计</strong><i><b style="width:0%"></b></i></div></div></article>
+          <article class="panel"><div class="panel-head"><div><small>SMART SUGGESTION</small><h2>下一餐目标</h2></div><span class="agent-orb tiny"></span></div><div class="target-plate"><div class="plate-visual"><span class="veg">½</span><span class="protein">¼</span><span class="carb">¼</span></div><div><p><i class="dot green"></i>蔬菜约 250g</p><p><i class="dot coral"></i>蛋白质 35–45g</p><p><i class="dot yellow"></i>主食约一拳</p></div></div><p class="panel-note">建议总热量 500–650 kcal，酱汁和烹饪用油是主要误差来源。</p></article>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="mealChoiceModal" aria-hidden="true">
+    <div class="modal large-modal">
+      <button class="modal-close" data-close-modal>×</button>
+      <div class="modal-head"><span class="agent-orb"></span><div><small>NEXT MEAL PLANNER</small><h2>这顿饭，你想怎么解决？</h2><p>Agent会使用相同的营养目标，为不同场景规划。</p></div></div>
+      <div class="choice-grid"><button data-choice="diy"><span>⌂</span><h3>在家做</h3><p>告诉我现有食材和可用时间</p><b>生成DIY食谱 →</b></button><button data-choice="outside"><span>⌖</span><h3>附近餐厅</h3><p>结合附近餐馆与今日缺口</p><b>查找合适餐食 →</b></button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="diyModal" aria-hidden="true">
+    <div class="modal recipe-modal">
+      <button class="modal-close" data-close-modal>×</button>
+      <div class="modal-head compact-head"><span class="agent-orb"></span><div><small>DIY MEAL TOOL</small><h2>用家里的食材做下一餐</h2></div></div>
+      <div class="ingredient-input"><label>现有食材</label><div class="ingredient-tags" id="ingredientTags"><span>鸡胸肉 ×</span><span>番茄 ×</span><span>鸡蛋 ×</span><span>米饭 ×</span></div><input id="ingredientInput" placeholder="输入食材后回车添加"></div>
+      <div class="pantry-options"><label>常备调料</label><div><label><input type="checkbox" name="diyPantry" value="食用植物油" checked> 食用油</label><label><input type="checkbox" name="diyPantry" value="酱油" checked> 酱油</label><label><input type="checkbox" name="diyPantry" value="食盐" checked> 盐</label><label><input type="checkbox" name="diyPantry" value="醋"> 醋</label><label><input type="checkbox" name="diyPantry" value="白砂糖"> 糖</label><label><input type="checkbox" name="diyPantry" value="辣椒酱"> 辣椒酱</label><label><input type="checkbox" name="diyPantry" value="黑胡椒酱"> 黑胡椒酱</label></div><small>勾选家中可用调料；实际使用量会计入营养计算。</small></div>
+      <div class="form-row"><label>可用时间<select id="cookTime"><option>20分钟</option><option>10分钟</option><option>30分钟</option></select></label><label>厨具<select id="cookTools"><option>炒锅 + 电饭煲</option><option>空气炸锅</option><option>只有微波炉</option></select></label></div>
+      <button class="primary-btn full" id="generateRecipeBtn">✦ 让 Agent 规划食谱</button>
+      <div class="generation-zone" id="recipeResult"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="outsideModal" aria-hidden="true">
+    <div class="modal restaurant-modal">
+      <button class="modal-close" data-close-modal>×</button>
+      <div class="modal-head compact-head"><span class="agent-orb"></span><div><small>LOCAL MEAL TOOL</small><h2>附近适合你的下一餐</h2><p>使用当前位置搜索附近餐馆</p></div></div>
+      <div class="agent-working" id="restaurantLoading"><span class="loader"></span><div><strong>Agent 正在规划</strong><p id="loadingText">读取今日营养缺口…</p></div></div>
+      <div class="location-fallback" id="locationFallback" hidden><p>自动定位失败？输入所在城市/商圈后重试</p><div class="form-row"><input id="restaurantAreaInput" placeholder="例如：北京五道口" autocomplete="off"><button type="button" class="secondary-btn full" id="restaurantAreaBtn">用这个位置搜索</button></div></div>
+      <div class="restaurant-results" id="restaurantResults"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="weightModal" aria-hidden="true">
+    <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="metric-icon mint">↘</span><div><small>WEIGH IN</small><h2>记录体重</h2></div></div><label class="field-label">记录日期<input type="date" id="weightDate"></label><label class="weight-input"><input type="number" id="weightInput" value="47.0" min="20" max="400" step="0.1"><span>kg</span></label><p class="hint" id="weightRecordHint">建议在起床、如厕后和进食前称重；补登会保留实际记录时间。</p><button class="primary-btn full" id="saveWeightBtn">保存体重</button></div>
+  </div>
+  <div class="modal-backdrop" id="agentLogsModal" aria-hidden="true">
+    <div class="modal">
+      <button class="modal-close" data-close-modal>×</button>
+      <div class="modal-head compact-head"><span class="metric-icon blue">◫</span><div><small>AGENT LOGS</small><h2>工具调用日志</h2><p>服务端持久化的对话、工具调用与复盘记录，按时间倒序。</p></div></div>
+      <div class="logs-toolbar"><div class="logs-filter" id="logsFilter"><button type="button" data-kind="" class="active">全部</button><button type="button" data-kind="agent_tool">工具调用</button><button type="button" data-kind="agent_skill">技能</button><button type="button" data-kind="agent_chat_start">对话</button><button type="button" data-kind="agent_review">复盘</button></div><button type="button" class="secondary-btn" id="refreshAgentLogs">刷新</button></div>
+      <div class="agent-logs" id="agentLogsList"><p class="hint">打开后自动加载最近日志…</p></div>
+    </div>
+  </div>
+
+  <div class="onboarding" id="onboarding">
+    <div class="onboarding-brand"><div class="brand-mark"><span>饭</span></div><div><strong>小饭</strong><small>你的个人减脂 Agent</small></div></div>
+    <div class="onboarding-shell">
+      <div class="onboarding-copy"><span class="eyebrow">START WITH YOUR GOAL</span><h1>先认识一下你</h1><p>数据只保存在当前浏览器中。完成建档后，Agent才能根据你的真实状态工作。</p><div class="onboarding-points"><span>✓ 本地保存，可随时清除</span><span>✓ 确定性工具负责关键计算</span><span>✓ 计划随体重与目标动态更新</span></div></div>
+      <form class="onboarding-form" id="onboardingForm">
+        <div class="steps"><i class="active"></i><i></i><i></i></div>
+        <section class="form-step active" data-step="1">
+          <label>怎么称呼你？<input name="name" required placeholder="例如：小雨" maxlength="12"></label>
+          <div class="form-row"><label>年龄<input name="age" required type="number" min="18" max="80" placeholder="22"></label><label>生理性别<select name="sex" required><option value="female">女性</option><option value="male">男性</option></select></label></div>
+          <div class="form-row"><label>身高（cm）<input name="height" required type="number" min="120" max="220" step="0.1" placeholder="157.5"></label><label>当前体重（kg）<input name="weight" required type="number" min="30" max="250" step="0.1" placeholder="47"></label></div>
+        </section>
+        <section class="form-step" data-step="2">
+          <div class="form-row"><label>目标体重（kg）<input name="targetWeight" required type="number" min="30" max="250" step="0.1" placeholder="44"></label><label>计划结束日期<input name="targetDate" required type="date"></label></div>
+          <label>日常活动水平<select name="activity"><option value="sedentary">久坐，很少运动</option><option value="light">轻度，每周1–3次活动</option><option value="moderate">中度，每周3–5次活动</option><option value="active">活跃，每周6次以上</option></select></label>
+          <div class="goal-preview" id="goalPreview"><span class="agent-orb small"></span><p>填写目标后，Agent将在下一步计算理论每日摄入。</p></div>
+        </section>
+        <section class="form-step" data-step="3">
+          <label>你通常怎么吃？<select name="mealMode"><option value="mixed">在家做和外食都有</option><option value="home">主要在家做</option><option value="outside">主要外食/外卖</option></select></label>
+          <label>目前最想改善的问题<textarea name="habit" rows="3" placeholder="例如：经常吃高热量食品、晚上容易吃零食"></textarea></label>
+          <label>饮食偏好或过敏<textarea name="preferences" rows="2" placeholder="例如：偏好中餐、不吃海鲜、花生过敏"></textarea></label>
+          <label class="consent"><input type="checkbox" name="consent" required><span>我了解这是一款健康管理Demo，不替代医疗诊断；我的数据将保存在当前浏览器。</span></label>
+          <div class="final-evaluation" id="finalEvaluation"></div>
+        </section>
+        <p class="form-error" id="formError"></p>
+        <div class="form-actions"><button type="button" class="secondary-btn" id="prevStep" disabled>上一步</button><button type="button" class="primary-btn" id="nextStep">下一步</button><button type="submit" class="primary-btn" id="finishOnboarding">创建我的 Agent</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="manualMealModal" aria-hidden="true">
+    <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="agent-orb small"></span><div><small>REAL NUTRITION LOOKUP</small><h2>记录一餐</h2><p>先查本地数据库，未命中时自动查询已配置的外部API。</p></div></div><form id="manualMealForm"><label class="field-label">记录日期<input name="date" required type="date"></label><label class="field-label">记录类别<select name="type"><option value="早餐">早餐</option><option value="午餐">午餐</option><option value="晚餐">晚餐</option><option value="其他摄入">其他摄入（零食、饮料等）</option></select></label><label class="field-label">吃了什么？<input name="name" required placeholder="例如：鸡胸肉、avocado"></label><div class="form-row"><label>大约份量（g）<input name="grams" type="number" min="1" max="3000" value="100"></label><label>&nbsp;<button class="secondary-btn full lookup-btn" id="lookupNutritionBtn" type="button">查询营养数据</button></label></div><div id="nutritionLookupStatus" class="lookup-status"></div><details class="barcode-tools"><summary>包装食品？通过条码查询</summary><div class="form-row"><label>商品条码<input name="barcode" inputmode="numeric" placeholder="包装上的EAN条码"></label><label>&nbsp;<button class="secondary-btn full lookup-btn" id="lookupBarcodeBtn" type="button">查询条码</button></label></div></details><div class="form-row"><label>热量（kcal）<input name="calories" required type="number" min="0" max="5000"></label><label>蛋白质（g）<input name="protein" type="number" min="0" max="300" value="0"></label></div><button class="primary-btn full" type="submit">保存并让Agent更新计划</button></form></div>
+  </div>
+
+  <div class="modal-backdrop" id="adjustGoalModal" aria-hidden="true">
+    <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="agent-orb small"></span><div><small>AGENT REPLANNING</small><h2>调整减重目标</h2><p>已有体重和饮食记录会完整保留。</p></div></div><form id="adjustGoalForm"><div class="form-row"><label>目标体重（kg）<input name="targetWeight" required type="number" min="30" max="250" step="0.1"></label><label>计划天数<input name="planDays" required type="number" min="1" max="365" step="1"></label></div><label class="field-label">新的目标日期<input name="targetDate" required type="date"></label><div class="final-evaluation" id="adjustGoalPreview"></div><button class="primary-btn full" type="submit">保存并让 Agent 重新规划</button></form></div>
+  </div>
+
+  <div class="modal-backdrop" id="preferencesModal" aria-hidden="true">
+    <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="agent-orb small"></span><div><small>EDIT CURRENT PROFILE</small><h2>修改当前个人信息</h2><p>这里展示的是你现在的状态；保存后会覆盖旧值并立即重新规划。</p></div></div><form id="preferencesForm"><div class="form-row"><label>称呼<input name="name" required maxlength="12"></label><label>年龄<input name="age" required type="number" min="18" max="80"></label></div><div class="form-row"><label>生理性别<select name="sex"><option value="female">女性</option><option value="male">男性</option></select></label><label>身高（cm）<input name="height" required type="number" min="120" max="220" step="0.1"></label></div><label class="field-label">日常活动水平<select name="activity"><option value="sedentary">久坐，很少运动</option><option value="light">轻度，每周1–3次活动</option><option value="moderate">中度，每周3–5次活动</option><option value="active">活跃，每周6次以上</option></select></label><label class="field-label">通常怎么吃<select name="mealMode"><option value="mixed">在家做和外食都有</option><option value="home">主要在家做</option><option value="outside">主要外食/外卖</option></select></label><label class="field-label">目前想改善的习惯<textarea name="habit" rows="2" placeholder="例如：晚上加餐、暴饮暴食"></textarea></label><label class="field-label">辣度偏好<select name="tastePreference"><option value="不辣">不辣</option><option value="微辣">微辣</option><option value="中辣">中辣</option><option value="重辣">重辣</option></select></label><label class="field-label">其他饮食偏好<textarea name="preferences" rows="2" placeholder="例如：偏好中餐、少甜、喜欢酸味"></textarea></label><label class="field-label">不喜欢的食材<textarea name="dislikedFoods" rows="2" placeholder="例如：香菜、肥肉"></textarea></label><label class="field-label">过敏或严格忌口<textarea name="allergies" rows="2" placeholder="例如：花生过敏、不吃海鲜"></textarea></label><button class="primary-btn full" type="submit">保存当前个人信息</button></form></div>
+  </div>
+
+  <div class="toast" id="toast"><span>✓</span><p></p></div>
+  <script src="app.js"></script>
+</body>
+</html>

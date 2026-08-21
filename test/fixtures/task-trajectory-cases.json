@@ -1,0 +1,12 @@
+[
+  {"id":"choice-01","category":"method_choice","start":"叫外卖和自己煮哪个更适合我今天？","followup":"我选自己做，给我一个简单方案","expected":["open_meal_choice","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"choice-05","category":"method_choice","start":"今天很累，晚饭在家做还是外食？","followup":"还是在家做吧","expected":["open_meal_choice","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"choice-07","category":"method_choice","start":"冰箱有食材但也能点外卖，我应该选哪个？","followup":"我决定把食材做掉","expected":["open_meal_choice","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"choice-10","category":"method_choice","start":"自己下厨和出去吃哪个更适合减脂？","followup":"我选自己下厨","expected":["open_meal_choice","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"diy-01","category":"diy_followup","start":"冰箱有鸡胸肉和西兰花，晚饭怎么做？","followup":"我想用空气炸锅做，继续安排","expected":["open_diy","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"diy-04","category":"diy_followup","start":"家里只剩豆腐、青菜和米饭，怎么搭一顿？","followup":"我选清淡做法","expected":["open_diy","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"diy-08","category":"diy_followup","start":"附近店很多但我不想出门，今天在家做什么晚饭？","followup":"我决定自己下厨","expected":["open_diy","open_diy"],"completion":"diy_workspace_ready"},
+  {"id":"restaurant-01","category":"restaurant_followup","start":"帮我找公司附近适合一个人吃午饭的店","followup":"我在上海静安寺附近，继续找餐厅","expected":["open_restaurants","open_restaurants"],"completion":"restaurant_workspace_ready"},
+  {"id":"restaurant-05","category":"restaurant_followup","start":"我在杭州西湖文化广场附近，晚饭有什么推荐？","followup":"继续按附近餐厅帮我找","expected":["open_restaurants","open_restaurants"],"completion":"restaurant_workspace_ready"},
+  {"id":"restaurant-09","category":"restaurant_followup","start":"在家做饭太麻烦，我还是点个不油的外卖","followup":"我在成都春熙路附近，继续找外卖","expected":["open_restaurants","open_restaurants"],"completion":"restaurant_workspace_ready"}
+]

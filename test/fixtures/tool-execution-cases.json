@@ -1,0 +1,50 @@
+[
+  {
+    "id": "tool-read-state",
+    "message": "请调用用户状态工具，告诉我今天已经摄入多少，以及还剩多少热量。",
+    "expectedTool": "read_user_state"
+  },
+  {
+    "id": "tool-meal-budget",
+    "message": "请调用本餐预算工具，计算我今天午餐还可以吃多少热量和蛋白质。",
+    "expectedTool": "get_meal_budget"
+  },
+  {
+    "id": "tool-diy-recipe",
+    "message": "我家有鸡胸肉、西兰花和糙米；请调用食谱生成工具，为我做一份 20 分钟午餐方案并给出克数。",
+    "expectedTool": "compose_diy_recipe"
+  },
+  {
+    "id": "tool-nutrition",
+    "message": "请调用营养查询工具，查询鸡胸肉每 100g 的热量和蛋白质。",
+    "expectedTool": "search_nutrition"
+  },
+  {
+    "id": "tool-daily-plan",
+    "message": "请调用今日计划工具，给我生成今天尚未安排餐次的三餐概览。",
+    "expectedTool": "get_daily_plan"
+  },
+  {
+    "id": "tool-memory",
+    "message": "请调用记忆工具，读取我最近 7 天的饮食记录摘要。",
+    "expectedTool": "get_memory"
+  },
+  {
+    "id": "tool-propose-record",
+    "message": "我今天午餐吃了鸡胸肉沙拉，约 420 kcal、蛋白质 35g，帮我记到午餐。",
+    "expectedTool": "propose_meal_record"
+  },
+  {
+    "id": "tool-revise-pending",
+    "message": "把待确认的鸡胸肉沙拉从 420 kcal 改成 500 kcal，蛋白质改为 40g。",
+    "expectedTool": "revise_pending_meal",
+    "pendingMeal": {
+      "id": "eval-pending-meal",
+      "name": "鸡胸肉沙拉",
+      "calories": 420,
+      "protein": 35,
+      "breakdown": "鸡胸肉、蔬菜和酱汁",
+      "recordDate": "2026-08-20"
+    }
+  }
+]
