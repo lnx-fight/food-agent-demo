@@ -10,6 +10,8 @@
 - 创建 Pages 项目 `xiaofan-food-agent` 与 D1 `xiaofan-production`；GitHub `main` 在 CI 通过后才运行数据库迁移、上传同次构建并检查线上健康。静态资源按白名单发布，API 密钥存于 Pages Secret，专用部署令牌存于仓库 Actions Secret。
 - 主要文件：`server.mjs`、`accounts.mjs`、`package.json`、`package-lock.json`、`.github/workflows/cloudflare.yml`、`migrations/`、`test/cloudflare.test.mjs`、`README.md`；本地 SQLite 数据不自动迁移。Pages 提醒为请求触发与 SSE 重连快照，不提供常驻定时推送。当前 cf beta 不支持 Pages 上传，仅该步骤采用固定版本临时上传命令；资源管理与 D1 迁移继续使用 cf。
 
+- CI 首次实跑发现 Ubuntu Python 标准库 `test` 包与测试目录重名；已在 `package.json` 改为直接执行数据测试脚本，避免模块导入冲突。
+
 ### 数据：下载并导入 USDA 公开权威食材和餐食营养数据
 
 - 按新增要求，从 USDA 官方下载 Foundation Foods 2026-04、SR Legacy 2018-04 与 FNDDS 2021–2023 数据，依据 CC0 保存版本、来源 URL 和 SHA-256；导入 D1 的独立权威表及 FTS5 索引，保留原有中文食物库。

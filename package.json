@@ -16,7 +16,7 @@
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "db:migrate": "node scripts/migrate-d1.mjs",
     "data:download": "python3 scripts/import-usda.py",
-    "test:dataset": "python3 -m unittest test/usda_import_test.py"
+    "test:dataset": "python3 test/usda_import_test.py"
   },
   "engines": {
     "node": ">=22.18"
