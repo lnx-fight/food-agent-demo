@@ -1,10 +1,12 @@
 {
   "accountId": "f3727b3e2096142028fd7e3d806e3141",
-  "projectName": "xiaofan-food-agent",
+  "projectName": "xiaofan-food",
   "databaseId": "ec312e1b-cc02-4d93-81dc-e94ff26435bf",
   "databaseName": "xiaofan-production",
   "productionBranch": "main",
   "compatibilityDate": "2026-10-16",
-  "compatibilityFlags": ["nodejs_compat"],
+  "compatibilityFlags": [
+    "nodejs_compat"
+  ],
   "pagesUploaderVersion": "4.151.0"
 }

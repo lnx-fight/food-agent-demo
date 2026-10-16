@@ -5,11 +5,12 @@ import {resolve,sep,extname} from 'node:path';
 // 仅发布浏览器实际使用的文件，禁止把源码、密钥和用户数据库当作静态资源。
 export const PUBLIC_FILES=Object.freeze([
   'index.html','app.js','adaptive-plan.js','sw.js','styles.css','pantry.css',
-  'onboarding.css','api.css','record-status.css','adaptive-plan.css','account-ui.js','account.css'
+  'onboarding.css','api.css','record-status.css','adaptive-plan.css','account-ui.js','account.css',
+  'xiaofan-icon.png','icon-192.png','apple-touch-icon.png','favicon-32.png','favicon.ico','site.webmanifest'
 ]);
 const allowed=new Set(PUBLIC_FILES);
 const root=realpathSync(fileURLToPath(new URL('.',import.meta.url)));
-const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
+const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.ico':'image/x-icon','.webmanifest':'application/manifest+json; charset=utf-8'};
 
 export function servePublicFile(req,res,pathname){
   const finish=(status,message,headers={})=>{

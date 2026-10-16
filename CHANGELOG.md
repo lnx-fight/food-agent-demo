@@ -4,6 +4,12 @@
 
 ## 2026-10-16
 
+### 品牌：更换无 agent 的网址并设计小饭网站头像
+
+- 按要求将正式访问地址切换为 `https://xiaofan-food.pages.dev`；Cloudflare 的既有 pages.dev 子域名不能直接重命名，因此创建 `xiaofan-food` 并继续绑定原 `xiaofan-production` D1，迁移生产配置与经用户确认的应用密钥；`cloudflare/project.json` 和 GitHub 自动部署目标、README 同步更新。
+- 使用内置 image_gen 设计浅绿色背景、深绿色笑脸饭碗与嫩芽头像，替换登录页、侧栏及建档页品牌标记，新增多尺寸 favicon、Apple touch icon 与 PWA 图标/manifest；保留可复现原图、提示词和尺寸生成脚本，更新静态资源白名单、媒体类型和离线缓存版本。
+- 主要文件：`assets/`、`scripts/build-icons.mjs`、`index.html`、`styles.css`、`account.css`、`public-files.mjs`、`sw.js`、`site.webmanifest`、`cloudflare/project.json`、`package.json`、`README.md`。新域名需要重新登录；云端账号记录保留，旧域名尚未同步的浏览器记录需先同步。网页 Agent 功能文案按本次澄清保留。
+
 ### 部署：Cloudflare Pages、免费 D1 与 GitHub CI/CD
 
 - 为将当前完整功能版部署到 Cloudflare，新增 `cloudflare/`、`database.mjs`、`runtime.mjs`、构建/迁移/发布脚本和 GitHub Actions；保留既有本地修改，Node SQLite 与线上 D1 共用业务代码，数据库调用改为异步，状态保存和账号清理通过原子批次及版本守卫防止并发覆盖。

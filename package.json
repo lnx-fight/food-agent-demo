@@ -16,7 +16,8 @@
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "db:migrate": "node scripts/migrate-d1.mjs",
     "data:download": "python3 scripts/import-usda.py",
-    "test:dataset": "python3 test/usda_import_test.py"
+    "test:dataset": "python3 test/usda_import_test.py",
+    "icons:build": "node scripts/build-icons.mjs"
   },
   "engines": {
     "node": ">=22.18"
@@ -24,6 +25,7 @@
   "devDependencies": {
     "cf": "1.0.0-beta.17",
     "esbuild": "0.28.2",
-    "miniflare": "5.20261012.0-beta"
+    "miniflare": "5.20261012.0-beta",
+    "sharp": "0.35.5"
   }
 }

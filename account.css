@@ -12,3 +12,5 @@
 .account-actions{display:flex;gap:10px;flex-wrap:wrap}.account-actions button{padding:10px 14px;border:1px solid #d6e1da;border-radius:9px;background:#f7f8f4;color:#18352f;font-size:13px}.account-message{position:sticky;bottom:0;background:#eff6ee;padding:12px;border-radius:10px;color:#1d6b55;font-size:13px;line-height:1.7}.account-message:empty{display:none}
 .account-danger button{background:#9f3636;color:white}.account-danger p{color:#9f3636;font-size:13px;line-height:1.8}.account-sync-help{font-size:13px;line-height:1.8;color:#71837e}.account-conflict{background:#fff6e4;border-radius:12px;padding:15px;font-size:13px;line-height:1.8}.account-conflict button{margin:5px 5px 0 0}.account-sync-status{display:block;font-size:10px;margin-top:4px;opacity:.8}.account-sync-status[data-status="error"],.account-sync-status[data-status="conflict"]{color:#ffd794}
 @media(max-width:600px){.auth-card{padding:26px}.account-overlay{padding:10px}.account-card{padding:22px;max-height:95dvh}.account-actions button{flex:1}.auth-gate{padding:16px}}
+
+.auth-brand{display:flex;align-items:center;gap:12px}.auth-brand img{display:block;flex:none;border-radius:13px}

@@ -6,7 +6,7 @@
 
 完整功能版部署于 Cloudflare Pages，账号、会话和用户记录存储在 Cloudflare D1：
 
-[打开小饭完整功能版](https://xiaofan-food-agent.pages.dev/)
+[打开小饭完整功能版](https://xiaofan-food.pages.dev/)
 
 下面的 GitHub Pages 链接仍为静态面试演示。
 
@@ -29,7 +29,9 @@ npm start
 
 ## Cloudflare Pages + D1 自动部署
 
-生产站点：[xiaofan-food-agent.pages.dev](https://xiaofan-food-agent.pages.dev/)。Pages Functions 复用现有 Node HTTP 业务代码，数据库调用改为异步；本地继续使用 SQLite，线上通过请求上下文绑定 D1，不依赖本地磁盘。静态构建只发布 `public-files.mjs` 白名单，密钥、数据库、原始下载包和服务端源码不作为静态文件上传。
+生产站点：[xiaofan-food.pages.dev](https://xiaofan-food.pages.dev/)。Pages Functions 复用现有 Node HTTP 业务代码，数据库调用改为异步；本地继续使用 SQLite，线上通过请求上下文绑定 D1，不依赖本地磁盘。静态构建只发布 `public-files.mjs` 白名单，密钥、数据库、原始下载包和服务端源码不作为静态文件上传。
+
+网址于 2026-10-16 更换为 `xiaofan-food.pages.dev`，继续使用同一个 D1；由于浏览器 Cookie 和本机暂存按域名隔离，新网址需重新登录，尚未同步的旧网址本机修改需先在旧网址完成同步。
 
 项目及数据库编号等非敏感配置位于 `cloudflare/project.json`。`.github/workflows/cloudflare.yml` 对 push 和 PR 执行语法检查、Node 回归测试、真实 workerd/D1 集成测试、USDA 导入校验和 30 条 Agent 数据集结构校验；只有 `main` 的 CI 通过，才下载同一次 CI 的构建产物、执行版本化 D1 迁移并发布 Pages。PR 和其他分支不部署生产环境，也不连接生产数据库。生产部署串行执行，发布后检查 `/api/health` 的中文食物和 USDA 数据量。
 
@@ -253,3 +255,7 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 | `GET /api/agent/logs`、`GET /api/agent/check` | 查询工具日志与当前 Agent 状态摘要 |
 
 完整产品需求见 [PRD.md](./PRD.md)。
+
+## 网站头像与图标
+
+品牌头像采用浅绿底、深绿笑脸饭碗和嫩芽，应用于登录页、侧栏、建档页、浏览器标签和移动端主屏幕。内置 image_gen 生成的原图保存在 `assets/xiaofan-avatar.png`，完整提示词在 `assets/xiaofan-avatar-prompt.txt`；`npm run icons:build` 生成 512px/192px 图标、180px Apple touch icon、32px PNG favicon 和 16/32/48px ICO。公开资源由白名单控制，Service Worker 缓存版本同步升级。

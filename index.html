@@ -10,6 +10,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="小饭" />
   <title>小饭 · 个人减脂 Agent</title>
+  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,7 +29,7 @@
 <body class="account-loading">
   <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
     <div class="auth-card">
-      <div class="auth-brand">小饭</div><h1 id="authTitle">欢迎回到小饭</h1>
+      <div class="auth-brand"><img src="xiaofan-icon.png" width="44" height="44" alt="" />小饭</div><h1 id="authTitle">欢迎回到小饭</h1>
       <p>让每一顿都更适合你。登录后，在不同设备继续使用自己的计划和记录。</p>
       <p id="authLoading" role="status">正在连接账号服务…</p><button id="authRetry" class="secondary-btn" hidden>重新连接</button>
       <form id="authForm" hidden>
@@ -46,7 +50,7 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark"><span>F</span></div>
+        <div class="brand-mark"><img src="xiaofan-icon.png" width="38" height="38" alt="" /></div>
         <div><strong>小饭</strong><small>减脂 Agent</small></div>
       </div>
 
@@ -291,7 +295,7 @@
   </div>
 
   <div class="onboarding" id="onboarding">
-    <div class="onboarding-brand"><div class="brand-mark"><span>饭</span></div><div><strong>小饭</strong><small>你的个人减脂 Agent</small></div></div>
+    <div class="onboarding-brand"><div class="brand-mark"><img src="xiaofan-icon.png" width="38" height="38" alt="" /></div><div><strong>小饭</strong><small>你的个人减脂 Agent</small></div></div>
     <div class="onboarding-shell">
       <div class="onboarding-copy"><span class="eyebrow">START WITH YOUR GOAL</span><h1>先认识一下你</h1><p id="onboardingDataNote">档案和记录保存在你的账号中，支持跨设备恢复。完成建档后，Agent才能根据你的真实状态工作。</p><div class="onboarding-points"><span id="onboardingStoragePoint">✓ 账号保存，可导出或清空</span><span>✓ 确定性工具负责关键计算</span><span>✓ 计划随体重与目标动态更新</span></div><button type="button" class="account-link" id="onboardingAccount" hidden>账号与数据 / 退出登录</button></div>
       <form class="onboarding-form" id="onboardingForm">
