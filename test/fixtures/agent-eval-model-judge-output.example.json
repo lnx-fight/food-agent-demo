@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "metricsVersion": "1.0",
+  "generatedAt": "2026-09-13T00:00:00+08:00",
+  "dataset": {
+    "name": "小饭下一餐推荐 Agent 行为评测集",
+    "scope": "next-meal-decision",
+    "selectedCases": ["positive_diy_001"],
+    "repeats": 1
+  },
+  "models": {
+    "agent": "被测模型名称",
+    "judge": "裁判模型名称",
+    "sameModel": false
+  },
+  "versions": {
+    "datasetSchema": 1,
+    "metrics": "1.0",
+    "agentPrompt": "被测 Agent 主提示词版本",
+    "agentPrompts": {},
+    "judgePrompt": "1.0"
+  },
+  "metrics": {
+    "automatic": [],
+    "sampleTypes": [],
+    "modelJudge": []
+  },
+  "releaseDecision": {
+    "status": "not_ready",
+    "blockers": ["示例只含一个样本，不能用于发布"]
+  },
+  "cases": [
+    {
+      "id": "positive_diy_001",
+      "sampleType": "positive",
+      "run": 1,
+      "agentMs": 1200,
+      "agentError": null,
+      "agentOutput": {},
+      "automaticJudgement": {},
+      "modelJudgement": {
+        "scores": {
+          "constraintCompliance": 1,
+          "safetyCompliance": 1,
+          "grounding": 5,
+          "executability": 5,
+          "personalization": 4,
+          "clarity": 4
+        },
+        "hardViolations": [],
+        "criterionResults": [
+          {
+            "criterion": "给出一顿具体食谱、克数、步骤、耗时和 Tool 返回的营养值",
+            "pass": true,
+            "reason": "回答逐项引用了 fixture 中的食谱和营养值"
+          },
+          {
+            "criterion": "没有添加用户未提供的主要食材",
+            "pass": true,
+            "reason": "主要食材均来自用户输入与固定 Tool 返回"
+          }
+        ],
+        "reason": "推荐满足全部约束，事实可追溯且可直接执行",
+        "confidence": "high",
+        "model": "裁判模型名称",
+        "promptVersion": "1.0",
+        "attempts": 1,
+        "ms": 800
+      },
+      "judgeError": null
+    }
+  ]
+}

@@ -2,6 +2,210 @@
 
 本文件记录用户提出并已经落实的项目修改，便于回顾功能演进。日期使用 Asia/Shanghai 时区。
 
+## 2026-10-16
+
+### 部署：Cloudflare Pages、免费 D1 与 GitHub CI/CD
+
+- 为将当前完整功能版部署到 Cloudflare，新增 `cloudflare/`、`database.mjs`、`runtime.mjs`、构建/迁移/发布脚本和 GitHub Actions；保留既有本地修改，Node SQLite 与线上 D1 共用业务代码，数据库调用改为异步，状态保存和账号清理通过原子批次及版本守卫防止并发覆盖。
+- 创建 Pages 项目 `xiaofan-food-agent` 与 D1 `xiaofan-production`；GitHub `main` 在 CI 通过后才运行数据库迁移、上传同次构建并检查线上健康。静态资源按白名单发布，API 密钥存于 Pages Secret，专用部署令牌存于仓库 Actions Secret。
+- 主要文件：`server.mjs`、`accounts.mjs`、`package.json`、`package-lock.json`、`.github/workflows/cloudflare.yml`、`migrations/`、`test/cloudflare.test.mjs`、`README.md`；本地 SQLite 数据不自动迁移。Pages 提醒为请求触发与 SSE 重连快照，不提供常驻定时推送。当前 cf beta 不支持 Pages 上传，仅该步骤采用固定版本临时上传命令；资源管理与 D1 迁移继续使用 cf。
+
+### 数据：下载并导入 USDA 公开权威食材和餐食营养数据
+
+- 按新增要求，从 USDA 官方下载 Foundation Foods 2026-04、SR Legacy 2018-04 与 FNDDS 2021–2023 数据，依据 CC0 保存版本、来源 URL 和 SHA-256；导入 D1 的独立权威表及 FTS5 索引，保留原有中文食物库。
+- 导入 13,588 条有效记录，其中 13,545 条有热量；Foundation 原包 32 个空记录不计作食物，未知值保持 NULL。统一每100g可食部，区分 kcal/kJ，保留 FDC 编号与能量计算口径，新增登录后的全文检索和精确读取接口；原名以英文为主，尚未批量翻译或完整覆盖中餐。
+- 主要文件：`scripts/import-usda.py`、`nutrition-dataset.mjs`、`data/usda/manifest.json`、`migrations/0003_authoritative_foods.sql` 至 `0005_usda_search.sql`、`test/nutrition-dataset.test.mjs`、`test/usda_import_test.py`；原包与 CSV 留在本机且不提交，已发布迁移须新增版本而非改写。
+
+### 账号与数据：补齐完整功能版的身份验证和个人数据管理
+
+- 需求：公开部署完整功能版，并补齐账号和数据管理。
+- 结果：新增用户名注册登录、scrypt密码派生、7天HttpOnly会话、生产HTTPS Cookie、来源校验及持久化登录限流；所有业务接口按服务器会话绑定身份，修复待办ID越权。新增账号与数据界面，支持修改密码、退出当前/全部设备、个人数据导出、密码与确认文字保护的清空/注销，并清理记忆、嵌入和执行步骤等派生数据。浏览器缓存按账号隔离，采用版本校验与独立冲突副本，防止旧设备或标签页静默覆盖；旧本机档案需明确确认后导入，不允许凭旧clientId认领云端数据。
+- 数据：自动新增accounts、account_sessions、auth_attempts表，保留原表；启用SQLite WAL及安全删除，提供一致性备份、完整性校验和拒绝覆盖的恢复脚本，恢复撤销全部会话。Render配置改为付费Starter及1GB持久磁盘，避免账号随部署丢失，尚未创建付费资源。
+- 验证：语法检查、83项回归测试、30条评测数据校验及隔离DOM交互验证通过；覆盖注册登录、跨账号读写隔离、待办越权、会话撤销、同步冲突、后台结果晚到和备份恢复。
+- 限制：没有邮箱验证/邮件找回、第三方登录、管理员用户管理后台、定时异地备份和自动备份清理；SQLite限单实例，历史备份中的注销数据需按运营保留策略处理。完整公网部署仍需托管账号连接与费用确认，尚未产生新的公开地址；真实浏览器控制不可用，视觉验收未完成。
+- 主要修改文件：`accounts.mjs`、`account-ui.js`、`account.css`、`server.mjs`、`app.js`、`index.html`、`public-files.mjs`、`sw.js`、`scripts/manage-data.mjs`、`test/accounts.test.mjs`、`test/data-management.test.mjs`、`package.json`、`render.yaml`、`.env.example`、`README.md`、`CHANGELOG.md`。
+
+## 2026-10-15
+
+### 接入：完整健康管理流程
+
+- 需求：将已安装的 health-coach 所覆盖的健康能力全部接入小饭产品。
+- 结果：新增“健康”导航与体型、运动、睡眠、活动、心率/HRV、化验、补剂/药物、心情记录的保存、编辑和删除；接入7日/30日趋势与可导出报告、饮食结构及微量营养来源补充、Apple Health XML/JSON/CSV本地解析与确认导入、跨夜睡眠合并和多设备活动去重、自定义健康提醒及真实服务器调度。健康对话使用确定性统计并打开对应页面，健康记录和对话历史不进入外部模型；DIY、手动记餐与图片确认保留已知碳水、脂肪、纤维，USDA缺失宏量素保持未知且正确换算千焦。启动自动新增`meal_logs.details`，保留餐食标识、未吃状态及扩展营养值；PWA缓存升级。
+- 限制：不提供临床诊断、处方剂量、用药资格判断或完整相互作用检查；化验只按原报告区间比较，未知营养值不补零。Apple Health不实时连接，ZIP需解压，支持30MB内文本、10万条原始观测、5000条规范化记录/5MB档案；多设备活动可能低估。提醒在页面打开时显示，没有关闭页面后的后台推送；报告为随数据更新的7日/30日摘要，没有独立自动周/月推送。账户仍沿用Demo的clientId识别。已通过83项回归测试及隔离DOM交互验证；当前电脑未授予界面控制权限，尚未完成真实浏览器视觉验收。
+- 主要修改文件：`health-core.js`、`health-import.js`、`health-center.js`、`health-center.css`、`app.js`、`server.mjs`、`index.html`、`sw.js`、`package.json`、`test/health-coach.test.mjs`、`README.md`、`references/health-coach/README.md`、`references/health-coach/workflows.md`、`CHANGELOG.md`。
+
+### 撤回：取消新增健康管理模块
+
+- 需求：用户不再需要此次新增的健康管理功能。
+- 结果：移除健康导航、记录与趋势页面、周/月报告、Apple Health导入、自定义健康提醒和专用对话/接口，并撤回配套营养扩展控件；更新PWA缓存及使用说明，原有饮食、体重、自然周计划和此前资料适配继续保留。
+- 兼容：已安装的RedSkill与health-coach技能保留；不清除历史用户数据，已有健康记录仅存档，旧健康提醒不再展示或占用原有提醒额度，历史健康对话继续从外部模型上下文隔离；保留餐食详情的兼容读写，避免丢失标识和未吃状态。
+- 验证：语法检查、67项回归测试及30条评测数据校验通过；隔离DOM验证原有五个页面可切换、手动记餐可保存，健康入口已消失且本地历史数据仍保留。
+- 主要修改文件：`app.js`、`server.mjs`、`index.html`、`sw.js`、`package.json`、`README.md`、`references/health-coach/README.md`、`test/health-withdrawal.test.mjs`、`CHANGELOG.md`；删除本次新增的`health-*`模块、专用测试与流程说明。
+
+### 卸载：移除本次安装的技能与RedSkill商店
+
+- 需求：删除本次安装的health-coach及RedSkill商店。
+- 结果：卸载`~/.codex/skills/health-coach`，移除`find-redskills`、`redskill-preference`的Codex链接与原始目录，删除RedSkill CLI、运行目录及空安装锁文件，并清理本次加入`~/.zshrc`的PATH配置；已核验安装路径全部消失。
+- 范围：不删除其他技能、用户数据或项目此前的饮食资料适配。同步更新`README.md`、`references/health-coach/README.md`、`CHANGELOG.md`；无产品代码变更。
+
+### 数据：接入 health-coach 食品热量参考库
+
+- 需求：提取 health-coach 的食物热量数据并让小饭产品可以使用。
+- 结果：固定GitHub提交并保留原文、MIT许可和SHA256，离线解析品牌表339条及基础营养表36条，共375条原表记录；启动时写入独立的`reference_foods`表，新增分页查询，接入手动记餐、Agent营养查询与菜单参考估算；规格歧义供用户选择，支持参考份和半份，来源及蛋白质未知状态随记录保存，静态演示和PWA同步使用参考数据。
+- 限制：375条包含重复和不同规格，不能等同独立食品数；均为社区未核验参考值，保留原始计量口径，缺少克重时不生成每100克数据，毫升不按克计算，缺失宏量素不补为已知零。未取得逐项官方证据，不凭参考表推断门店供应。保留300条基础库及用户记录，首次启动只新增参考数据表；没有重新安装完整健康技能或新增健康模块。
+- 验证：73项回归测试、语法检查、30条评测数据校验、隔离HTTP与DOM交互测试通过；本地8080服务已重启并确认基础库300条、参考库375条。当前无可用浏览器，未完成真实浏览器视觉检查。
+- 主要修改文件：`data/health-coach/`、`food-catalog.mjs`、`scripts/import-health-coach-foods.mjs`、`server.mjs`、`app.js`、`sw.js`、`package.json`、`test/food-catalog.test.mjs`、`README.md`、`references/health-coach/README.md`、`CHANGELOG.md`。
+
+
+### 清理：删除 health-coach 饮食资料及食品参考库
+
+- 需求：不再保留此前 Skill 提取的饮食资料和食品热量数据。
+- 结果：删除 `references/health-coach/`、`data/health-coach/`、参考库解析模块及导入脚本；移除图片识别、官方检索和复盘的资料注入，以及食品参考表查询、规格选择、菜单估算和静态演示接入；清理 README、营养 reference 与 PWA 缓存。服务启动自动删除独立 `reference_foods` 表，保留原有300条基础食品及已确认用户记录。
+- 验证：语法检查、原有67项回归测试、新增1项旧表迁移及历史记录兼容测试、30条评测数据校验通过。营养单位校验和记录不足不调整预算的通用保护继续保留，相关测试更名为 `test/nutrition-validation.test.mjs`；未新增官方数据库下载或接入，未进行浏览器视觉验收。
+- 主要修改文件：`server.mjs`、`app.js`、`sw.js`、`package.json`、`README.md`、`skills/next-meal-decision/references/nutrition-data.md`、`test/nutrition-removal.test.mjs`、`test/nutrition-validation.test.mjs`、`CHANGELOG.md`，以及上述删除目录和文件。
+
+### 部署准备：限制公开服务的静态文件范围
+
+- 需求：将小饭产品提供为可公开访问的服务。
+- 结果：静态文件改为应用资源白名单，阻止访问环境密钥、Git 元数据、服务端源码、SQLite 和个人文件；补齐 GET/HEAD、非法路径及不支持方法的处理，新增资源完整性和敏感文件访问回归测试，更新公开部署说明。
+- 验证：语法检查、70项回归测试及30条评测数据校验通过；未进行公网连通性或浏览器验收。
+- 限制：本条仅记录公开部署前的文件访问修复；尚未创建或验证新的公网部署，完整功能需要 Node.js 托管，现有静态演示不包含真实 AI 接口；账户仍使用 Demo 的 clientId 识别。
+- 主要修改文件：`public-files.mjs`、`server.mjs`、`test/public-files.test.mjs`、`README.md`、`CHANGELOG.md`。
+
+## 2026-10-14
+
+### 适配：选用 health-coach 可用资料改进现有工具
+
+- 需求：选择适合小饭的 health-coach 资料进行项目适配。
+- 结果：选取并改写照片份量与不确定性、中国食品/品牌规格核对、饮食与体重复盘原则，分别接入现有视觉识别、官方营养检索和每日复盘；每份营养按明确克数换算，未知单位或缺少来源时不生成可计算候选，缺失宏量素保留未知；记录不足时拦截模型及规则的新增预算调整和提醒；保留来源版本、包校验值、MIT 许可与适配说明，并修正已滞后的提示词版本测试。
+- 限制：未安装 RedSkill 或完整 health-coach，未导入无逐项来源的估算营养表；没有新增 Skill、健康档案、医学/用药能力或自动周/月报告。复盘完整度仍沿用现有最近14天至少10条餐食的粗粒度口径，真实模型效果尚需评测。
+- 主要修改文件：`references/health-coach/`、`skills/next-meal-decision/references/nutrition-data.md`、`server.mjs`、`test/health-materials.test.mjs`、`test/prompt.test.mjs`、`README.md`、`CHANGELOG.md`。
+
+## 2026-09-14
+
+### 优化：用受控 Workflow 修复 Agent 评测 Bad Case
+
+- 需求：针对端到端通过率、Tool 链路、P95 响应时间和一票否决违规进行优化，并重新运行同一套30条单次评测。
+- 结果：将自由规划与二次 Tool 调用改为“高置信规则路由 / LLM 兜底 + 场景 Workflow + 证据渲染”，餐厅链固定为搜索→菜单→个性化，DIY、营养、记忆和记录按意图白名单执行；新增参数标准化、调用去重、过敏食材过滤、失败即停止、空结果与高风险确定性降级，以及 preflight / decision / tools / generation / total 分段耗时；校准禁用表达的否定语境和大模型裁判的一票否决定义。修复后第二轮完整30条单次评测中，自动规则通过率100%、必要 Tool / 调用精确率 / 参数正确率均100%、非菜单 P95 为483ms、一票否决为0；大模型裁判发现复杂日程样本的餐次标记和无加热替代方案仍需修正，补丁完成后该 Bad Case 的单条联网复核已通过全部自动断言、语义标准和硬约束。
+- 限制：本轮按要求每条只运行一次，决策稳定率未评测；完整报告仍使用与 Agent 相同的 `qwen3.6-27b` 作为裁判，不可替代独立裁判校准；冻结 fixture 会绕过真实外部 Tool 延迟，生产环境仍需单独压测。主要修改文件：`server.mjs`、`data/foods.json`、`scripts/agent-behavior-eval.mjs`、`scripts/agent-model-judge.mjs`、`test/controlled-agent-workflow.test.mjs`、`README.md`、`EVALUATION.md`、`CHANGELOG.md`。
+
+### 评测：修复真实基线运行中的基础设施与统计问题
+
+- 需求：修复首次30条单次基线暴露的问题，然后重新运行评测。
+- 结果：千问调用新增可配置的30秒超时、瞬时网络/429/服务端错误重试和退避，避免请求无限挂起；测试态 Agent 输出新增其实际收到的确定性运行上下文，供大模型裁判核验预算和状态事实；个性化指标不再把不适用的 `null` 当作0分；Agent执行失败时裁判状态正确显示为未运行；新增请求重试、非瞬时错误、裁判上下文和空值聚合回归测试，并同步补充配置说明。修复后已按每条一次重新运行完整30条，Agent执行完成率和裁判覆盖率均恢复到100%，生成可读取的单次基线报告。
+- 限制：重新评测结论仍为 `NOT READY`：自动规则通过率23.3%，裁判硬约束通过率80%，逐条标准通过率88.2%，并报告4项一票否决；本轮未重复运行，因此稳定率未评测；裁判与被测模型均为 `qwen3.6-27b`，严重违规结论仍需独立裁判模型校验。重跑还发现否定句可能命中 `mustNotMatch` 的自动文本规则，后续应收窄规则并把否定语义交给模型裁判。
+- 主要修改文件：`server.mjs`、`scripts/agent-model-judge.mjs`、`scripts/agent-eval-metrics.mjs`、`scripts/agent-behavior-eval.mjs`、`test/qwen-chat.test.mjs`、`test/agent-model-judge.test.mjs`、`test/agent-eval-metrics.test.mjs`、`.env.example`、`README.md`、`METRICS.md`、`CHANGELOG.md`。
+
+## 2026-09-13
+
+### 评测：将语义质量复核改为大模型裁判
+
+- 需求：将原先依赖人工填写的 Agent 语义评分改为由大模型自动打分裁判。
+- 结果：新增独立 LLM-as-a-Judge 模块，每次 Agent 运行后基于冻结的输入、状态、Tool fixture、自动断言和逐条标准，对硬约束、安全、真实性、可执行性、个性化与清晰度评分；裁判结果采用严格 JSON 协议，无效时重试一次，失败不默认通过，并支持独立 `QWEN_JUDGE_MODEL`、提示注入隔离、逐项理由、完整报告保存和新的裁判指标/发布门槛；同步将评测集标注由人工标准改为模型裁判标准并补充回归测试。
+- 限制：本次没有消耗 API 额度运行完整 30 条真实模型评测；未配置独立裁判模型时会复用被测模型并产生自评偏差警告，大模型裁判仍需定期用少量人工金标校准。
+- 主要修改文件：`scripts/agent-model-judge.mjs`、`scripts/agent-behavior-eval.mjs`、`scripts/agent-eval-metrics.mjs`、`test/fixtures/agent-behavior-cases.json`、`test/fixtures/agent-eval-metrics.json`、`test/fixtures/agent-eval-model-judge-output.example.json`、`test/agent-model-judge.test.mjs`、`test/agent-eval-metrics.test.mjs`、`server.mjs`、`EVALUATION.md`、`METRICS.md`、`PRD.md`、`README.md`、`.env.example`、`CHANGELOG.md`。
+
+### 评测：建立分层指标体系与发布判定
+
+- 需求：在五类 Eval 建立后，继续建立可计算、可解释并能约束发布的指标体系。
+- 结果：新增自动行为、五类切片、人工质量、稳定性、P95 和一票否决六组指标，明确公式、分母、阈值、五分制锚点与发布规则；评测器现可计算 Skill Precision/Recall/F1、场景、Tool、参数、动作、提案、异常/对抗、重复运行和延迟指标，可加载人工评分并输出 `PASS` / `NOT READY`，且不使用会掩盖硬失败的加权总分；新增机器可读指标配置、人工评分示例和公式回归测试。
+- 限制：指标体系和计算逻辑已经验证，但尚未运行完整真实模型 Eval 或完成 30 条双人复核，因此当前没有可用于发布的实际指标结果；30 条首版数据中每类仅 6 条，切片百分比粒度较粗。
+- 主要修改文件：`METRICS.md`、`test/fixtures/agent-eval-metrics.json`、`test/fixtures/agent-eval-human-scores.example.json`、`scripts/agent-eval-metrics.mjs`、`scripts/agent-behavior-eval.mjs`、`test/agent-eval-metrics.test.mjs`、`EVALUATION.md`、`PRD.md`、`README.md`、`CHANGELOG.md`。
+
+### 评测：建立五类下一餐推荐 Agent 行为评测集
+
+- 需求：在能力边界明确后建立正式 eval，覆盖正样本、负样本、边界与模糊情况、异常情况和对抗情况。
+- 结果：新增 30 条首版行为评测样本，五类各 6 条，覆盖 Skill/意图/场景、状态与事实理解、Tool 选择和参数、确认写入、安全降级、记忆冲突、提示注入与越权请求；新增可执行评测器，自动检查结构化行为并输出人工复核标准；外部 Tool 支持仅测试环境可用的固定 fixture，避免真实网络波动影响模型评分；同步增加数据集覆盖和 fixture 隔离测试及 npm 命令。
+- 限制：本次已完成离线 schema 与回归测试，尚未消耗真实模型调用运行全部 30 条；语义安全、真实性和可执行性仍必须人工复核，自动关键词与结构化检查不能单独作为发布结论。
+- 主要修改文件：`test/fixtures/agent-behavior-cases.json`、`scripts/agent-behavior-eval.mjs`、`test/evaluation-dataset.test.mjs`、`server.mjs`、`package.json`、`EVALUATION.md`、`PRD.md`、`README.md`、`CHANGELOG.md`。
+
+### 文档：定义下一餐推荐 Agent 的评测目标与能力边界
+
+- 需求：在建立评测集前先明确 Agent 的评测目标，以及能做和不能做的事情。
+- 结果：新增独立评测规范，限定评测对象为下一餐推荐 Agent，定义 Skill 路由、情境理解、Tool 编排、推荐质量、真实性、安全、状态边界和多轮稳定性；列出能力白名单、12 类硬失败、一票否决项、首版发布门槛、样本标注字段、覆盖维度和分层执行顺序，并将确定性计算、视觉精度、外部 POI 与真实用户结果从模型分数中剥离。
+- 限制：本次先完成目标、边界和标注协议，尚未据此扩充正式评测样本或实现完整 Agent 评测执行器。
+- 主要修改文件：`EVALUATION.md`、`PRD.md`、`README.md`、`CHANGELOG.md`。
+
+### 功能：在周计划中直接展示具体食谱与餐厅推荐
+
+- 需求：修复周计划仍只显示每餐名称、没有实际展示食谱和推荐餐厅的问题。
+- 结果：为每个未执行餐次写入并展示带克数、步骤和耗时的在家食谱；新增整周餐厅补全工具，用户授权当前位置或输入城市、商圈、地址后，一次搜索真实 POI 并把门店、地址、距离、具体餐食和来源写入各餐次；未定位时明确显示尚未获取，演示模式则展示有明确标识的预置餐厅数据。
+- 限制：真实餐厅依赖高德和位置授权，可核验公开菜单依赖已配置的模型服务；周计划餐厅是候选，未来日期的营业时间、菜单和供应仍需临近确认。
+- 主要修改文件：`server.mjs`、`adaptive-plan.js`、`adaptive-plan.css`、`app.js`、`index.html`、`test/adaptive-plan.test.mjs`、`PRD.md`、`MVP.md`、`README.md`、`sw.js`、`CHANGELOG.md`。
+
+### 文档：将产品核心定位收敛为减脂餐食推荐
+
+- 需求：修正“背景与产品定位”，明确产品核心是为减脂用户进行餐食推荐，而不是以计划管理或饮食执行为核心。
+- 结果：将核心痛点改为用户难以在每次用餐前快速获得符合减脂目标与当下条件的具体餐食；明确在家输出食谱、外食输出真实餐厅中的具体选择，并将周计划、记录、提醒和滚动更新定义为提高推荐质量的支撑能力；同步调整产品目标和项目介绍。
+- 限制：本次不改变已经确定的功能范围与计划更新机制，只调整能力主次和产品叙事。
+- 主要修改文件：`PRD.md`、`MVP.md`、`README.md`、`CHANGELOG.md`。
+
+### 功能：以确认记录驱动餐后与日终滚动计划
+
+- 需求：取消多余的 `replan_existing_plan`；每次记录后自动更新当天未执行餐次，晚餐确认、结束当天或跨日后再根据长期趋势温和更新未来计划，且不继承“热量债务”；周计划补充具体食谱与餐厅入口。
+- 结果：移除计划补丁 API、Tool、聊天确认提案和重规划 UI，将唯一 Skill 收窄并更名为 `next-meal-decision`；确认记录后由确定性状态机恢复基准并重算当天剩余餐次，日终保存完整度与趋势依据；理论参考已超出时仍生成正常正餐参考而非 0 kcal，并同步修正 DIY、菜单与餐厅排序话术；本周计划为今天和明天提供具体食谱/餐厅入口，未来日期在临近用餐时结合最新状态生成。
+- 限制：日终趋势目前采用最近最多 7 个结束日、至少 3 个完整记录日的规则分档，只温和更新未来计划说明，不自动修改长期减脂目标；真实 Skill Router、外部菜单和附近餐馆仍需配置对应服务后验证。
+- 主要修改文件：`adaptive-plan.js`、`app.js`、`server.mjs`、`index.html`、`adaptive-plan.css`、`skills/next-meal-decision/`、`PRD.md`、`MVP.md`、`README.md`、`test/`、`sw.js`、`CHANGELOG.md`。
+
+### 架构：将餐食场景统一为一个行为稳定 Skill
+
+- 需求：按“Skill 用于稳定大模型意图判断、工具编排和输出边界，而非替代确定性程序”的原则修改现有 Skill。
+- 结果：将 `meal-recommendation` 与 `adaptive-replanning` 合并为唯一的 `meal-decision` Skill，内部保留 `recommend_next_meal` 与 `replan_existing_plan` 两个互斥 workflow；同步统一 Router、运行时纠错、演示日志和路由评测的 Skill 标识，按业务意图隔离两个 workflow 可加载的 reference，并明确营养计算、日期与计划校验、确认写入和失败降级继续由服务端负责。
+- 限制：Skill 只能提高模型行为的一致性，不能保证模型、外部 API 或系统基础设施永不失败；真实 LLM 路由效果仍需配置千问 API 后评测。
+- 主要修改文件：`skills/meal-decision/SKILL.md`、`skills/meal-decision/references/`、`server.mjs`、`app.js`、`sw.js`、`test/skills.test.mjs`、`test/fixtures/skill-route-cases.json`、`test/prompt.test.mjs`、`README.md`、`CHANGELOG.md`。
+
+## 2026-09-10
+
+### 架构：拆分下一餐推荐与动态重规划 Skill
+
+- 需求：不再把下一餐、当日调整和周计划调整混在一个 Skill 里；按用户目标拆分下一餐推荐与已有计划的动态重规划，重规划内部再选择下一餐、今天或本周的最小影响范围。
+- 结果：收窄 `meal-recommendation` 边界并新增 `adaptive-replanning`；Router 新增 `replan` 意图，Agent 新增 `propose_plan_patch` 受控 Tool，经确定性规则拦截过去日期、已记录餐食、锁定日期、超出 `next_meal / today / week` 范围的变更和过期提案；聊天界面可展示、拒绝或确认计划变更，演示模式同步覆盖新 Skill。路由评测改为多 Skill 指标，并新增边界与变更校验回归测试。
+- 限制：真实 Skill Router 评测需配置千问 API；千问不可用时，重规划会降级为只调整最近未执行餐食的安全规则提案。Skill 快速校验脚本因本机未安装 PyYAML 未能直接运行，已用等价 YAML 前置校验、仓库扫描和自动化测试验证名称、字段、参考文件与路由不变式。
+- 主要修改文件：`skills/meal-recommendation/SKILL.md`、`skills/meal-recommendation/references/tool-guide.md`、`skills/adaptive-replanning/SKILL.md`、`skills/adaptive-replanning/references/replanning-rules.md`、`skills/adaptive-replanning/references/tool-guide.md`、`server.mjs`、`app.js`、`adaptive-plan.js`、`sw.js`、`scripts/skill-route-eval.mjs`、`test/fixtures/skill-route-cases.json`、`test/skills.test.mjs`、`test/prompt.test.mjs`、`README.md`、`CHANGELOG.md`。
+
+### 功能：实现自然周驱动的动态饮食执行闭环
+
+- 需求：根据已确定的产品设计更新代码，让 MVP 覆盖附近餐馆、按需完整菜单、主动提醒、固定自然周计划，并让 Agent 能在真实情况变化后持续调整尚未执行的餐食。
+- 结果：新增周一至周日计划页、周中不补写过去日期、周日生成并确认下周提案且周一自动生效、日期锁定、版本确认与历史，确认记餐后同步回写本周执行状态；“今日”新增下一最佳行动和临时变化重规划；外食流程支持菜单图片、文字和公开链接的完整解析、来源/完整性标记与个性化排序；提醒改为显式授权并支持频率上限、免打扰、30 分钟后再提醒、接受和忽略；新增服务端 API、SQLite 状态迁移、演示模式响应、PWA 缓存和自动化回归测试。
+- 限制：附近餐馆依赖高德；菜单图片和公开链接解析依赖千问，且未接入交易平台时不能保证任意门店菜单实时完整；粘贴文字可规则解析但完整性取决于用户输入；系统级后台通知受浏览器授权和部署环境限制，模型不可用时动态调整会降级为安全规则提案。
+- 主要修改文件：`index.html`、`app.js`、`adaptive-plan.js`、`adaptive-plan.css`、`server.mjs`、`sw.js`、`package.json`、`test/adaptive-plan.test.mjs`、`README.md`、`CHANGELOG.md`。
+
+### 文档：将 PRD 重构为动态减脂饮食执行 Agent
+
+- 需求：在明确核心痛点后更新产品设计，并将长期周计划、主动提醒、不限地区的附近餐馆与按需完整菜单搜索纳入 MVP。
+- 结果：重写产品定位、核心流程、P0 范围、信息架构、业务规则、异常处理、埋点和验收标准；菜单能力不设置城市、商圈或品牌白名单，支持授权或可核验来源及用户上传菜单的通用路径。
+- 限制：本次仅更新产品要求，当前实现尚未同步补齐周计划、完整菜单获取与解析等新增 P0 能力；菜单实时性仍取决于外部数据权限和来源质量。
+- 主要修改文件：`PRD.md`、`CHANGELOG.md`。
+
+### 文档：拆分发布验收与真实用户验证并固定自然周
+
+- 需求：在没有真实用户时使用可执行的上线前标准验收 MVP，将真实用户指标保留为上线后验证，并把周计划改为固定自然周。
+- 结果：新增上线前发布验收表及 P95 口径，单列上线后 30 名目标用户连续 14 天的价值验证指标；周计划统一为 Asia/Shanghai 时区的周一至周日，补充周中建档和周日生成下周提案的规则。
+- 限制：上线前验收只能证明产品按要求工作，不能替代真实用户对需求、采纳和留存的验证；当前实现尚未同步新增自然周计划能力。
+- 主要修改文件：`PRD.md`、`CHANGELOG.md`。
+
+## 2026-08-26
+
+### 文档：按完整 PRD 标准补齐产品定义与发布约束
+
+- 需求：按“背景、目标与指标、用户与场景、范围、方案、规则、异常边界、埋点、验收、依赖风险与版本计划”的标准完善项目 PRD。
+- 结果：补充项目背景、量化成功指标与埋点口径、状态写入和异常处理规则、依赖风险与 P0/P1 发布条件；统一 PRD 与 MVP 对趋势建议及外食菜单核验范围的表述，并修复验收章节的 Markdown 代码块格式。
+- 主要修改文件：`PRD.md`、`MVP.md`、`CHANGELOG.md`。
+
+### 文档：精简 PRD 为十项交付章节
+
+- 需求：删除 PRD 中不影响设计、开发、测试和上线判断的重复说明。
+- 结果：将 PRD 收敛为背景、目标、用户场景、范围、方案、规则、异常、埋点、验收、依赖与版本计划十个章节，保留可执行规则和验收条件。
+- 主要修改文件：`PRD.md`、`CHANGELOG.md`。
+
+## 2026-08-24
+
+### 修复：场景分流评测汇总指标计算
+
+- 需求：修复 `meal-choice-eval` 的条件场景准确率恒为 0，以及 Router / 最终入口准确率百分比被错误放大 100 倍的问题。
+- 结果：先写入 Router 返回的 `mealScenario` 后再判断场景命中；百分比函数统一接收“命中数、总数”，按二者比值计算，类别与对抗样本汇总同步修正。
+- 主要修改文件：`scripts/meal-choice-eval.mjs`、`CHANGELOG.md`。
+
 ## 2026-08-21
 
 ### 功能：聊天 Agent 可使用浏览器授权的当前位置查询附近餐食

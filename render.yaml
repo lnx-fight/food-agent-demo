@@ -3,16 +3,25 @@ services:
     name: xiaofan-demo
     runtime: node
     region: singapore
-    plan: free
+    # 账号和SQLite记录必须保存在持久磁盘；此配置需要付费实例。
+    plan: starter
     buildCommand: npm run check
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
+    disk:
+      name: xiaofan-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: "22"
       - key: NODE_ENV
         value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: COOKIE_SECURE
+        value: "true"
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: USDA_API_KEY

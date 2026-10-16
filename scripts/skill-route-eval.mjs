@@ -1,4 +1,4 @@
-// Skill routing 评测：固定样本集 → 单次调用 routeDescription → 输出 Precision / Recall / F1。
+// Skill routing 评测：固定样本集 → 单次调用 routeDescription → 输出每个 Skill 的 Precision / Recall / F1 与集合准确率。
 // 用法：NODE_ENV=test node scripts/skill-route-eval.mjs
 // 可选：SKILL_ROUTE_EVAL_LIMIT=3、SKILL_ROUTE_EVAL_CONCURRENCY=6。
 import {readFileSync} from 'node:fs';
@@ -13,23 +13,17 @@ const CASES=JSON.parse(readFileSync(join(ROOT,'test/fixtures/skill-route-cases.j
 
 if(!process.env.DASHSCOPE_API_KEY)throw new Error('DASHSCOPE_API_KEY 未配置');
 
-const TARGET_SKILL='meal-recommendation';
+const TARGET_SKILLS=[...new Set(CASES.flatMap(testCase=>Array.isArray(testCase.expectSkills)?testCase.expectSkills:[]))];
 const limit=Number(process.env.SKILL_ROUTE_EVAL_LIMIT)||CASES.length;
 const concurrency=Math.max(1,Math.min(10,Number(process.env.SKILL_ROUTE_EVAL_CONCURRENCY)||6));
 
-function expectedHit(testCase){
-  return Array.isArray(testCase.expectSkills)&&testCase.expectSkills.includes(TARGET_SKILL);
-}
+function sameSkillSet(a=[],b=[]){return [...a].sort().join('|')===[...b].sort().join('|')}
 
-function predictedHit(result){
-  return Array.isArray(result.skills)&&result.skills.includes(TARGET_SKILL);
-}
-
-function calcMetrics(rows){
-  const tp=rows.filter(row=>row.expected&&row.predicted).length;
-  const fp=rows.filter(row=>!row.expected&&row.predicted).length;
-  const fn=rows.filter(row=>row.expected&&!row.predicted).length;
-  const tn=rows.filter(row=>!row.expected&&!row.predicted).length;
+function calcMetrics(rows,skill){
+  const tp=rows.filter(row=>row.expectedSkills.includes(skill)&&row.actualSkills.includes(skill)).length;
+  const fp=rows.filter(row=>!row.expectedSkills.includes(skill)&&row.actualSkills.includes(skill)).length;
+  const fn=rows.filter(row=>row.expectedSkills.includes(skill)&&!row.actualSkills.includes(skill)).length;
+  const tn=rows.filter(row=>!row.expectedSkills.includes(skill)&&!row.actualSkills.includes(skill)).length;
   const precision=tp+fp?tp/(tp+fp):0;
   const recall=tp+fn?tp/(tp+fn):0;
   const f1=precision+recall?2*precision*recall/(precision+recall):0;
@@ -50,13 +44,11 @@ function printMetrics(label,metrics){
 }
 
 async function evaluateCase(testCase,index){
-  const expected=expectedHit(testCase);
   const row={
     id:testCase.id,
     category:testCase.category,
     message:testCase.message,
-    expected,
-    predicted:false,
+    expectedSkills:Array.isArray(testCase.expectSkills)?testCase.expectSkills:[],
     actualSkills:[],
     actualIntent:'',
     expectedIntent:testCase.expectIntent||'',
@@ -67,12 +59,11 @@ async function evaluateCase(testCase,index){
     const routed=await routeDescription(testCase.message);
     row.actualSkills=routed.skills||[];
     row.actualIntent=routed.intent||'';
-    row.predicted=predictedHit(routed);
   }catch(error){
     row.error=error.message;
     row.countable=false;
   }
-  row.correct=row.countable&&row.expected===row.predicted;
+  row.correct=row.countable&&sameSkillSet(row.expectedSkills,row.actualSkills);
   row.intentMismatch=row.countable&&row.expectedIntent&&row.actualIntent!==row.expectedIntent;
   return {...row,index};
 }
@@ -86,23 +77,26 @@ console.log('\n===== Skill Routing 逐条结果 =====');
 for(const row of results){
   const mark=row.error?'E':row.correct?'✓':'✗';
   const skills=row.actualSkills.length?row.actualSkills.join(','):'[]';
-  const expected=row.expected?'hit':'no-hit';
-  const actual=row.error?`error:${row.error}`:row.predicted?'hit':'no-hit';
-  console.log(`${mark} ${row.category.padEnd(26)} ${row.id.padEnd(30)} expected=${expected.padEnd(7)} actual=${actual.padEnd(8)} skills=${skills.padEnd(22)} intent=${row.actualIntent||'-'}`);
+  const expected=row.expectedSkills.length?row.expectedSkills.join(','):'[]';
+  const actual=row.error?`error:${row.error}`:skills;
+  console.log(`${mark} ${row.category.padEnd(26)} ${row.id.padEnd(34)} expected=${expected.padEnd(24)} actual=${actual.padEnd(24)} intent=${row.actualIntent||'-'}`);
   if(row.intentMismatch)console.log(`   intent mismatch: expected=${row.expectedIntent} actual=${row.actualIntent}`);
 }
 
 const countable=results.filter(row=>row.countable);
-const overall=calcMetrics(countable);
-printMetrics('===== Skill Routing 整体指标 =====',overall);
+const exact=countable.filter(row=>row.correct).length,intentCorrect=countable.filter(row=>!row.intentMismatch).length;
+console.log('\n===== Skill Routing 整体指标 =====');
+console.log(`  Skill 集合准确率  ${percent(countable.length?exact/countable.length:0)} (${exact}/${countable.length})`);
+console.log(`  Intent 准确率     ${percent(countable.length?intentCorrect/countable.length:0)} (${intentCorrect}/${countable.length})`);
+for(const skill of TARGET_SKILLS)printMetrics(`===== ${skill} =====`,calcMetrics(countable,skill));
 
 const categories=[...new Set(results.map(row=>row.category))];
 console.log('\n===== Skill Routing 按 category =====');
 for(const category of categories){
   const rows=countable.filter(row=>row.category===category);
   if(!rows.length)continue;
-  const metrics=calcMetrics(rows);
-  printMetrics(category,metrics);
+  const correct=rows.filter(row=>row.correct).length;
+  console.log(`  ${category.padEnd(28)} ${percent(correct/rows.length)} (${correct}/${rows.length})`);
 }
 
 const wrong=countable.filter(row=>!row.correct);
@@ -110,7 +104,7 @@ if(wrong.length){
   console.log('\n===== 错误样本 =====');
   for(const row of wrong){
     console.log(`- [${row.category}] ${row.id}：${row.message}`);
-    console.log(`  期望 ${row.expected?'hit':'no-hit'}，实际 ${row.predicted?'hit':'no-hit'}，skills=${row.actualSkills.join(',')||'[]'}，intent=${row.actualIntent||'-'}`);
+    console.log(`  期望 skills=${row.expectedSkills.join(',')||'[]'}，实际 skills=${row.actualSkills.join(',')||'[]'}，intent=${row.actualIntent||'-'}`);
   }
 }
 

@@ -18,9 +18,27 @@
   <link rel="stylesheet" href="onboarding.css" />
   <link rel="stylesheet" href="api.css" />
   <link rel="stylesheet" href="record-status.css" />
+  <link rel="stylesheet" href="adaptive-plan.css" />
+  <link rel="stylesheet" href="account.css" />
   <style>.demo-mode-banner[hidden]{display:none!important}</style>
 </head>
-<body>
+<body class="account-loading">
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">小饭</div><h1 id="authTitle">欢迎回到小饭</h1>
+      <p>让每一顿都更适合你。登录后，在不同设备继续使用自己的计划和记录。</p>
+      <p id="authLoading" role="status">正在连接账号服务…</p><button id="authRetry" class="secondary-btn" hidden>重新连接</button>
+      <form id="authForm" hidden>
+        <label>用户名<input id="authUsername" name="username" autocomplete="username" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="3–32位字母、数字或下划线" required></label>
+        <label>密码<input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" placeholder="至少12个字符" required></label>
+        <div id="authError" class="account-error" role="alert"></div>
+        <button id="authSubmit" class="primary-btn full" type="submit">登录</button><button id="authMode" class="account-link" type="button">还没有账号？立即注册</button>
+        <p>请妥善保存用户名和密码。当前尚不支持邮件找回密码。</p>
+      </form>
+      <div id="legacyChoice" hidden><h2>导入本机旧记录？</h2><p>此浏览器保存了一份旧版小饭档案。仅当这些记录属于你时，才将它们导入当前账号；导入不会读取其他设备的旧数据。</p><button id="importLegacyBtn" class="primary-btn full">这些是我的记录，导入账号</button><button id="skipLegacyBtn" class="account-link">从新档案开始</button><button id="legacyLogout" class="account-link">退出当前账号</button></div>
+      <p id="accountMessage" class="account-message" role="status"></p>
+    </div>
+  </section>
   <aside class="demo-mode-banner" id="demoModeBanner" hidden role="status">
     <strong>面试演示模式</strong>
     <span>数据仅保存在当前浏览器；Agent、图片识别和附近餐馆展示预置响应，不调用外部 API。</span>
@@ -34,6 +52,7 @@
 
       <nav class="nav-list" aria-label="主导航">
         <button class="nav-item active" data-view="today"><span class="nav-icon">⌁</span>今日</button>
+        <button class="nav-item" data-view="week"><span class="nav-icon">▦</span>本周计划</button>
         <button class="nav-item" data-view="agent"><span class="nav-icon">✦</span>Agent 对话<i class="live-dot"></i></button>
         <button class="nav-item" data-view="trend"><span class="nav-icon">↗</span>体重</button>
         <button class="nav-item" data-view="meals"><span class="nav-icon">◌</span>饮食</button>
@@ -49,7 +68,8 @@
       <button class="profile-row" id="profileBtn">
         <span class="avatar">我</span><span><strong>我的测试档案</strong><small>22岁女性 · 157.5 cm</small></span><span>•••</span>
       </button>
-      <button class="reset-link" id="restartBtn">↻ 重新开始 / 清除本地数据</button>
+      <button class="reset-link" id="accountBtn" hidden>账号与数据<small class="account-sync-status" id="accountSyncStatus">正在连接</small></button>
+      <button class="reset-link" id="restartBtn" hidden>↻ 重新开始 / 清除本地数据</button>
     </aside>
 
     <main class="main-content">
@@ -80,6 +100,11 @@
             <div class="goal-labels"><span>正常范围低端</span><span>44 kg · BMI 17.74</span></div>
           </article>
         </div>
+
+        <article class="agent-next-action" id="agentNextAction">
+          <div class="next-action-copy"><small>NEXT BEST ACTION</small><h2 id="nextActionTitle">正在判断当前优先行动</h2><p id="nextActionReason">Agent 会结合本周计划、今日已确认摄入和长期习惯给出一个下一步。</p></div>
+          <div class="next-action-controls"><button type="button" class="secondary-btn" id="nextActionPrimary">查看本周计划</button><button type="button" class="secondary-btn" id="endTodayBtn">结束今天</button><small>每次确认记餐后自动刷新今天；结束今天后才温和更新未来日期。</small></div>
+        </article>
 
         <div class="metrics-grid" style="grid-template-columns:1fr 1fr">
           <article class="metric-card">
@@ -134,6 +159,14 @@
             <button class="trace-expand" id="openAgentBtn">和 Agent 讨论今日计划 →</button>
           </article>
         </div>
+      </section>
+
+      <section class="view" id="weekView">
+        <div class="view-intro"><div><small>WEEKLY EXECUTION</small><h1>本周计划</h1><p id="weekRangeLabel">按周一至周日组织；已执行记录保留，锁定只保护基准安排。</p></div><div class="top-actions"><button class="secondary-btn" id="regenerateWeekBtn">重新生成</button><button class="primary-btn compact" id="confirmWeekBtn">确认本周计划</button></div></div>
+        <article class="week-plan-summary" id="weekPlanSummary"><div><small>PLAN STATUS</small><h2>正在准备自然周计划</h2><p>系统会从今天开始安排到本周日。</p></div><span class="status-pill">准备中</span></article>
+        <article class="week-restaurant-tools"><div><strong>补全本周真实餐厅</strong><small id="weekRestaurantStatus">每餐已包含具体食谱；餐厅推荐需要一次位置授权或地点输入。</small></div><div class="week-location-input"><input id="weekRestaurantArea" maxlength="100" placeholder="输入城市、商圈或地址"><button type="button" id="loadWeekRestaurantsArea">按此地点补全</button><span>或</span><button type="button" id="loadWeekRestaurants">使用当前位置</button></div></article>
+        <div class="week-plan-grid" id="weekPlanGrid"></div>
+        <article class="panel week-version-panel"><div class="panel-head"><div><small>PLAN BASELINE</small><h2>基准计划与滚动更新</h2></div><span class="status-pill" id="weekVersionStatus">等待计划</span></div><p id="weekVersionReason">自然周基准计划需确认；记餐后的当天刷新与日终趋势更新自动生效。</p><div id="weekPlanHistory" class="week-plan-history"></div></article>
       </section>
 
       <section class="view" id="agentView">
@@ -221,12 +254,32 @@
       <div class="modal-head compact-head"><span class="agent-orb"></span><div><small>LOCAL MEAL TOOL</small><h2>附近适合你的下一餐</h2><p>使用当前位置搜索附近餐馆</p></div></div>
       <div class="agent-working" id="restaurantLoading"><span class="loader"></span><div><strong>Agent 正在规划</strong><p id="loadingText">读取今日营养缺口…</p></div></div>
       <div class="location-fallback" id="locationFallback" hidden><p>自动定位失败？输入所在城市/商圈后重试</p><div class="form-row"><input id="restaurantAreaInput" placeholder="例如：北京五道口" autocomplete="off"><button type="button" class="secondary-btn full" id="restaurantAreaBtn">用这个位置搜索</button></div></div>
+      <details class="menu-source-panel" id="menuSourcePanel">
+        <summary>已有菜单？上传完整菜单或提供链接</summary>
+        <p>Agent 只解析你提供或可核验来源中的内容，不会补写不存在的菜品。</p>
+        <div class="form-row"><label>餐馆名称<input id="menuRestaurantName" maxlength="80" placeholder="例如：某某餐厅"></label><label>公开菜单链接<input id="menuSourceUrl" type="url" placeholder="https://..."></label></div>
+        <label class="field-label">粘贴菜单文字<textarea id="menuSourceText" rows="5" placeholder="热菜&#10;宫保鸡丁 38&#10;清炒时蔬 22"></textarea></label>
+        <div class="menu-upload-row"><label class="secondary-btn">上传菜单图片<input id="menuImageInput" type="file" accept="image/*" hidden></label><span id="menuImageName">未选择图片</span><button type="button" class="primary-btn" id="parseMenuBtn">解析完整菜单</button></div>
+        <div id="menuParseResult"></div>
+      </details>
       <div class="restaurant-results" id="restaurantResults"></div>
     </div>
   </div>
 
   <div class="modal-backdrop" id="weightModal" aria-hidden="true">
     <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="metric-icon mint">↘</span><div><small>WEIGH IN</small><h2>记录体重</h2></div></div><label class="field-label">记录日期<input type="date" id="weightDate"></label><label class="weight-input"><input type="number" id="weightInput" value="47.0" min="20" max="400" step="0.1"><span>kg</span></label><p class="hint" id="weightRecordHint">建议在起床、如厕后和进食前称重；补登会保留实际记录时间。</p><button class="primary-btn full" id="saveWeightBtn">保存体重</button></div>
+  </div>
+  <div class="modal-backdrop" id="reminderModal" aria-hidden="true">
+    <div class="modal reminder-modal">
+      <button class="modal-close" data-close-modal>×</button>
+      <div class="modal-head compact-head"><span class="metric-icon mint">◇</span><div><small>PROACTIVE ACTIONS</small><h2>提醒与待办</h2><p>只有授权后才主动提醒；你可以随时关闭或降低频率。</p></div></div>
+      <form id="reminderSettingsForm" class="reminder-settings">
+        <label class="reminder-toggle"><input type="checkbox" name="enabled"><span><strong>开启主动提醒</strong><small>餐前、计划偏离、记录中断和周计划待确认</small></span></label>
+        <div class="form-row"><label>每日最多<select name="maxPerDay"><option value="1">1 条</option><option value="2">2 条</option><option value="3" selected>3 条</option><option value="5">5 条</option></select></label><label>免打扰<input name="quietRange" value="22:00-08:00" pattern="[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9]"></label></div>
+        <button type="submit" class="secondary-btn full">保存提醒设置</button>
+      </form>
+      <div class="reminder-list" id="reminderList"><p class="hint">正在读取待办…</p></div>
+    </div>
   </div>
   <div class="modal-backdrop" id="agentLogsModal" aria-hidden="true">
     <div class="modal">
@@ -240,7 +293,7 @@
   <div class="onboarding" id="onboarding">
     <div class="onboarding-brand"><div class="brand-mark"><span>饭</span></div><div><strong>小饭</strong><small>你的个人减脂 Agent</small></div></div>
     <div class="onboarding-shell">
-      <div class="onboarding-copy"><span class="eyebrow">START WITH YOUR GOAL</span><h1>先认识一下你</h1><p>数据只保存在当前浏览器中。完成建档后，Agent才能根据你的真实状态工作。</p><div class="onboarding-points"><span>✓ 本地保存，可随时清除</span><span>✓ 确定性工具负责关键计算</span><span>✓ 计划随体重与目标动态更新</span></div></div>
+      <div class="onboarding-copy"><span class="eyebrow">START WITH YOUR GOAL</span><h1>先认识一下你</h1><p id="onboardingDataNote">档案和记录保存在你的账号中，支持跨设备恢复。完成建档后，Agent才能根据你的真实状态工作。</p><div class="onboarding-points"><span id="onboardingStoragePoint">✓ 账号保存，可导出或清空</span><span>✓ 确定性工具负责关键计算</span><span>✓ 计划随体重与目标动态更新</span></div><button type="button" class="account-link" id="onboardingAccount" hidden>账号与数据 / 退出登录</button></div>
       <form class="onboarding-form" id="onboardingForm">
         <div class="steps"><i class="active"></i><i></i><i></i></div>
         <section class="form-step active" data-step="1">
@@ -279,6 +332,22 @@
   </div>
 
   <div class="toast" id="toast"><span>✓</span><p></p></div>
+  <div class="account-overlay" id="accountPanel" hidden>
+    <div class="account-card" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+      <button id="accountClose" class="account-close" aria-label="关闭账号与数据">×</button>
+      <h2 id="accountTitle">账号与数据</h2><p class="account-note">当前账号：<strong id="accountUsername"></strong></p>
+      <section><h3>我的数据</h3><p class="account-sync-help" id="accountSyncHelp"></p>
+        <div class="account-conflict" id="syncConflict" hidden>检测到其他设备更新。自动同步已暂停，本机修改仍然保留。请先导出本机修改，再载入云端数据并按需重新录入。<div class="account-actions"><button id="exportPending">导出本机修改</button><button id="loadCloud">载入云端最新数据</button></div></div>
+        <div class="account-actions"><button id="accountExport">导出全部数据</button><button id="retrySync">重试同步</button></div><p class="account-note">导出包含档案、饮食、体重、对话、计划和工具记录，请妥善保管。密码和会话凭证不包含在导出中。</p>
+      </section>
+      <section><h3>修改密码</h3><form id="accountPasswordForm"><label>当前密码<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><label>新密码<input name="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label><label>确认新密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label><button class="secondary-btn" type="submit">更新密码并退出其他设备</button></form></section>
+      <section><h3>登录设备</h3><p class="account-note">登录有效期为7天。退出后需要重新输入密码。</p><div class="account-actions"><button id="accountLogout">退出当前设备</button><button id="accountLogoutAll">退出全部设备</button></div></section>
+      <section class="account-danger"><h3>清空与注销</h3><p>请先导出需要保留的数据。清空或注销会立即移除在线数据库中的记录；托管备份中的历史副本需按备份保留策略清理。</p><form id="accountDangerForm"><label>操作<select id="accountDangerAction" name="action"><option value="clear">清空数据，保留账号</option><option value="delete">注销账号及全部数据</option></select></label><p id="accountDangerHint">输入“清空数据”，删除档案、记录、对话、计划及工具日志，保留账号。</p><label>确认文字<input id="accountDangerConfirmation" name="confirmation" autocomplete="off" required></label><label>当前密码<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button class="primary-btn" type="submit">确认执行</button></form></section>
+      <p id="accountPanelMessage" class="account-message" role="status"></p>
+    </div>
+  </div>
+  <script src="account-ui.js"></script>
   <script src="app.js"></script>
+  <script src="adaptive-plan.js"></script>
 </body>
 </html>

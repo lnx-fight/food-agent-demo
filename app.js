@@ -21,7 +21,18 @@ const state = {
 // 仅使用明确标注的预置演示响应，真实服务端部署保持原有 API 行为。
 const DEMO_MODE=location.hostname.endsWith('.github.io')||new URLSearchParams(location.search).has('demo');
 
-const STORAGE_KEY = 'fitpilot_user_v3';
+let STORAGE_KEY = 'fitpilot_user_v3';
+let accountReady=DEMO_MODE,accountVersion=0,syncPaused=false,syncInFlight=null,agentEventSource=null;
+const ACCOUNT_TAB_ID=(()=>{let id=sessionStorage.getItem('xiaofan_tab_id');if(!id){id=crypto.randomUUID();sessionStorage.setItem('xiaofan_tab_id',id)}return id})();
+let lastStoredSnapshot=null;
+const pendingKey=()=>STORAGE_KEY+'_pending_'+ACCOUNT_TAB_ID;
+const pendingSnapshot=()=>{try{return JSON.parse(localStorage.getItem(pendingKey()))}catch{return null}};
+const syncMetadata=()=>{try{return JSON.parse(localStorage.getItem(STORAGE_KEY+'_sync'))||{}}catch{return {}}};
+const syncDirty=()=>syncMetadata().dirty===true||!!pendingSnapshot();
+function setSyncMetadata(dirty){localStorage.setItem(STORAGE_KEY+'_sync',JSON.stringify({version:accountVersion,dirty}))}
+function syncStatus(kind,text){if(!DEMO_MODE)window.XiaofanAccount?.status(kind,text)}
+function preserveConflict(){syncPaused=true;if(userData)localStorage.setItem(pendingKey(),JSON.stringify({state:userData,version:accountVersion}));syncStatus('conflict','同步冲突，点击处理')}
+window.addEventListener('storage',event=>{if(!DEMO_MODE&&accountReady&&event.key===STORAGE_KEY&&event.newValue!==lastStoredSnapshot)preserveConflict()});
 let userData = null;
 let onboardingStep = 1;
 
@@ -49,7 +60,7 @@ function switchView(view){
   $$('.view').forEach(v=>v.classList.remove('active'));
   $(`#${view}View`).classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view));
-  const titles={today:'今日计划',agent:'Agent 对话',trend:'体重',meals:'饮食与食谱'};
+  const titles={today:'今日计划',week:'本周计划',agent:'Agent 对话',trend:'体重',meals:'饮食与食谱'};
   $('#pageTitle').textContent=titles[view];
   $('.sidebar').classList.remove('open'); window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -104,7 +115,7 @@ $('#generateRecipeBtn').addEventListener('click',async()=>{
     const mealType=suggestedMealType(),futureDay=state.activeMealDayOffset===1,pantry=$$('input[name="diyPantry"]:checked').map(input=>input.value),d=await apiFetch('/api/recipes/diy',{method:'POST',body:JSON.stringify({ingredients:state.ingredients,pantry,customFoods:[...diyCustomFoods.values()],cookTime:$('#cookTime').value,cookTools:$('#cookTools').value,mealType,dayOffset:futureDay?1:0,profile:userData?.profile||{},today:futureDay?{calories:0,protein:0,meals:[]}:{calories:state.calories,protein:state.protein,meals:todayMeals()}})}),r=d.result.recipe,n=r.nutrition,targets=d.result.targets,source=DEMO_MODE?'预置演示方案':d.result.generatedBy==='qwen'?'千问规划＋数据库校验':'规则规划＋数据库校验';
     addToolEvent('compose_home_recipe',`${source} · 匹配${d.result.matched.length}种食材`);addToolEvent('calculate_recipe_nutrition',`${n.kcal} kcal`);
     const ingredients=(r.ingredients||[]).map(x=>`<li>${escapeHtml(x.name)} ${x.grams}g <small>· ${x.kcal} kcal</small></li>`).join(''),steps=(r.steps||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('');
-    out.innerHTML=`<div class="lookup-status success">${mealDayLabel()}${escapeHtml(targets.mealType)}动态预算约 ${targets.mealKcal} kcal<span class="api-source">全天 ${targets.dailyTarget} kcal · 已摄入 ${targets.consumedKcal} kcal · 为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal</span></div><div class="recipe-result"><div class="recipe-cover"><div><small>真实食材匹配 · ${escapeHtml(source)}</small><h3>${escapeHtml(r.name)}</h3><p>使用现有食材 · 预计${Number(r.minutes)||20}分钟</p></div><span>约 ${n.kcal} kcal</span></div><div class="recipe-body"><div class="recipe-macros"><span>蛋白质 ${n.protein}g</span><span>碳水 ${n.carbs}g</span><span>脂肪 ${n.fat}g</span></div><div class="recipe-columns"><div><h4>食材与克数</h4><ul>${ingredients}</ul></div><div><h4>烹饪步骤</h4><ol>${steps}</ol></div></div><div class="confirm-row"><strong>加入${mealDayLabel()}${escapeHtml(targets.mealType)}</strong><button id="acceptRecipe">采用这份食谱</button></div></div></div>`;
+    const targetNotice=targets.budgetStatus==='exhausted'?`${mealDayLabel()}理论参考已超出；按正常${escapeHtml(targets.mealType)}提供约 ${targets.mealKcal} kcal 的参考，不以跳餐或 0 热量餐补偿`:`${mealDayLabel()}${escapeHtml(targets.mealType)}动态预算约 ${targets.mealKcal} kcal`;out.innerHTML=`<div class="lookup-status ${targets.budgetStatus==='normal'?'success':'warning'}">${targetNotice}<span class="api-source">全天 ${targets.dailyTarget} kcal · 已摄入 ${targets.consumedKcal} kcal${targets.budgetStatus==='exhausted'?' · 不把今天的偏差转成明日热量债务':` · 为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal`}</span></div><div class="recipe-result"><div class="recipe-cover"><div><small>真实食材匹配 · ${escapeHtml(source)}</small><h3>${escapeHtml(r.name)}</h3><p>使用现有食材 · 预计${Number(r.minutes)||20}分钟</p></div><span>约 ${n.kcal} kcal</span></div><div class="recipe-body"><div class="recipe-macros"><span>蛋白质 ${n.protein}g</span><span>碳水 ${n.carbs}g</span><span>脂肪 ${n.fat}g</span></div><div class="recipe-columns"><div><h4>食材与克数</h4><ul>${ingredients}</ul></div><div><h4>烹饪步骤</h4><ol>${steps}</ol></div></div><div class="confirm-row"><strong>加入${mealDayLabel()}${escapeHtml(targets.mealType)}</strong><button id="acceptRecipe">采用这份食谱</button></div></div></div>`;
     $('#acceptRecipe').onclick=()=>acceptMeal(r.name,n.kcal,n.protein,'DIY真实食谱',targets.mealType);
   }catch(e){const missing=e.data?.unmatched||[];if(missing.length){out.innerHTML=`<div class="lookup-status warning">${escapeHtml(e.message)}</div><form id="manualDiyNutrition"><p>请填写包装标签或可靠来源中的每100g营养值：</p>${missing.map((name,i)=>`<fieldset><legend>${escapeHtml(name)}</legend><div class="form-row"><label>热量 kcal<input type="number" name="kcal_${i}" min="0" max="1000" step="0.1" required></label><label>蛋白质 g<input type="number" name="protein_${i}" min="0" max="100" step="0.1" required></label></div><div class="form-row"><label>脂肪 g<input type="number" name="fat_${i}" min="0" max="100" step="0.1" required></label><label>碳水 g<input type="number" name="carbs_${i}" min="0" max="100" step="0.1" required></label></div></fieldset>`).join('')}<button class="primary-btn full" type="submit">使用这些数据重新生成</button><small>仅用于本次食谱，不会写入正式营养数据库。</small></form>`;$('#manualDiyNutrition').onsubmit=event=>{event.preventDefault();const formData=new FormData(event.currentTarget);missing.forEach((name,i)=>diyCustomFoods.set(name,{name,kcal:+formData.get(`kcal_${i}`),protein:+formData.get(`protein_${i}`),fat:+formData.get(`fat_${i}`),carbs:+formData.get(`carbs_${i}`)}));btn.click()}}else out.innerHTML=`<div class="lookup-status error">食谱生成失败：${escapeHtml(e.message)}</div>`}
   finally{btn.disabled=false;btn.textContent='✦ 重新规划'}
@@ -170,17 +181,39 @@ $('#profileBtn').onclick=()=>showToast('测试档案：22岁女性 · 157.5cm ·
 updateDashboard();
 
 // ==== 服务器端 Agent 同步：clientId / 状态同步 / 主动提醒 / 经历记忆 ====
-const CLIENT_ID=(()=>{let id=localStorage.getItem('fitpilot_client_id');if(!id){id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));localStorage.setItem('fitpilot_client_id',id)}return id})();
+let CLIENT_ID=(()=>{let id=localStorage.getItem('fitpilot_client_id');if(!id){id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));localStorage.setItem('fitpilot_client_id',id)}return id})();
 let serverSyncTimer=null;
-function scheduleServerSync(){clearTimeout(serverSyncTimer);serverSyncTimer=setTimeout(()=>syncUserToServer(),500)}
-async function syncUserToServer(){if(!userData)return;try{await apiFetch('/api/user/state',{method:'PUT',body:JSON.stringify({clientId:CLIENT_ID,profile:userData.profile,mealLogs:userData.mealLogs||[],weightLogs:userData.weightLogs||[],chatHistory:userData.chatHistory||[],pendingMealEstimate:userData.pendingMealEstimate||null})})}catch(e){console.warn('服务器同步失败：',e.message)}}
+function scheduleServerSync(){if(!accountReady)return;clearTimeout(serverSyncTimer);serverSyncTimer=setTimeout(()=>syncUserToServer(),500)}
+async function syncUserToServer(){
+  clearTimeout(serverSyncTimer);
+  if(!userData||!accountReady)return true;
+  if(syncPaused)return false;
+  if(syncInFlight){const ok=await syncInFlight;return ok&&syncDirty()?syncUserToServer():ok}
+  if(!DEMO_MODE&&!syncDirty())return true;
+  const snapshot=JSON.stringify(userData),payload=JSON.parse(snapshot);
+  syncStatus('saving','正在保存…');
+  syncInFlight=(async()=>{
+    try{
+      const result=await apiFetch('/api/user/state',{method:'PUT',headers:{'X-State-Version':String(accountVersion)},body:JSON.stringify({...payload,clientId:CLIENT_ID})});
+      if(!DEMO_MODE){accountVersion=result.stateVersion;if(syncPaused){preserveConflict();return false}setSyncMetadata(JSON.stringify(userData)!==snapshot)}
+      syncStatus('saved',syncDirty()?'正在保存后续修改…':'已保存到云端');return true;
+    }catch(error){
+      if(error.status===409)preserveConflict();
+      else syncStatus('error','同步失败，本机已暂存，点击重试');
+      return false;
+    }
+  })();
+  const ok=await syncInFlight;syncInFlight=null;
+  if(ok&&!DEMO_MODE&&syncDirty())return syncUserToServer();
+  return ok;
+}
 function adoptServerState(state){
   if(!state)return;
-  userData={profile:state.profile||{},weightLogs:Array.isArray(state.weightLogs)?state.weightLogs:[],mealLogs:Array.isArray(state.mealLogs)?state.mealLogs:[],chatHistory:Array.isArray(state.chatHistory)?state.chatHistory:[],pendingMealEstimate:state.pendingMealEstimate||null,createdAt:state.createdAt||new Date().toISOString()};
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(userData));
+  userData={profile:state.profile||{},weightLogs:Array.isArray(state.weightLogs)?state.weightLogs:[],mealLogs:Array.isArray(state.mealLogs)?state.mealLogs:[],chatHistory:Array.isArray(state.chatHistory)?state.chatHistory:[],pendingMealEstimate:state.pendingMealEstimate||null,weeklyPlan:state.weeklyPlan||null,pendingWeeklyPlan:state.pendingWeeklyPlan||null,upcomingWeeklyPlan:state.upcomingWeeklyPlan||null,weeklyPlanHistory:Array.isArray(state.weeklyPlanHistory)?state.weeklyPlanHistory:[],dayClosures:Array.isArray(state.dayClosures)?state.dayClosures:[],reminderSettings:state.reminderSettings||null,menuImports:Array.isArray(state.menuImports)?state.menuImports:[],createdAt:state.createdAt||new Date().toISOString()};
+  lastStoredSnapshot=JSON.stringify(userData);localStorage.setItem(STORAGE_KEY,lastStoredSnapshot);
   $('#onboarding')?.classList.add('hidden');hydrateApp();restoreAgentConversation();
 }
-async function loadServerUser(){try{const d=await apiFetch(`/api/user/state?clientId=${encodeURIComponent(CLIENT_ID)}`);if(d.ok&&d.state){if(!userData)adoptServerState(d.state);else scheduleServerSync()}}catch(e){}}
+async function loadServerUser(){if(!accountReady)return;try{const d=await apiFetch(`/api/user/state?clientId=${encodeURIComponent(CLIENT_ID)}`);if(d.ok&&d.state&&!userData)adoptServerState(d.state)}catch(e){}}
 function rememberAgent(kind,payload={}){if(!userData)return;apiFetch('/api/agent/memory',{method:'POST',body:JSON.stringify({clientId:CLIENT_ID,kind,date:localDateKey(),payload})}).catch(()=>{})}
 async function pollAgent(){
   if(!userData)return;
@@ -191,13 +224,13 @@ async function pollAgent(){
   }catch(e){}
 }
 async function runDailyReview(){
-  if(!userData||localStorage.getItem('fitpilot_reviewed_'+localDateKey()))return;
-  try{const d=await apiFetch('/api/agent/review',{method:'POST',body:JSON.stringify({clientId:CLIENT_ID})});if(d.result?.adjustment!=null){userData.profile.budgetAdjustmentKcal=d.result.adjustment;updateDashboard()}localStorage.setItem('fitpilot_reviewed_'+localDateKey(),'1')}catch(e){}
+  if(!userData||localStorage.getItem(STORAGE_KEY+'_reviewed_'+localDateKey()))return;
+  try{const d=await apiFetch('/api/agent/review',{method:'POST',body:JSON.stringify({clientId:CLIENT_ID})});if(d.result?.adjustment!=null){userData.profile.budgetAdjustmentKcal=d.result.adjustment;updateDashboard()}localStorage.setItem(STORAGE_KEY+'_reviewed_'+localDateKey(),'1')}catch(e){}
 }
 function connectAgentEvents(){
   if(DEMO_MODE||!userData||typeof EventSource==='undefined')return;
   try{
-    const es=new EventSource(`/api/agent/events?clientId=${encodeURIComponent(CLIENT_ID)}`);
+    agentEventSource?.close();const es=agentEventSource=new EventSource(`/api/agent/events?clientId=${encodeURIComponent(CLIENT_ID)}`);
     es.addEventListener('agent',e=>{
       try{const d=JSON.parse(e.data);if(d.type==='tasks'&&Array.isArray(d.tasks)&&d.tasks.length)showAgentReminder(d.tasks)}catch(_){}
     });
@@ -213,6 +246,7 @@ function showAgentReminder(tasks){
   const lines=fresh.map(t=>String(t.payload?.text||t.kind||'有新的建议')).filter(Boolean);
   showToast(`Agent提醒：${lines.join('；')}`,8000,'✦','agent');
   addToolEvent('agent_proactive',lines[0]);
+  if(typeof window.refreshReminderCenter==='function')window.refreshReminderCenter(fresh);
 }
 let agentLogFilter='';
 async function loadAgentLogs(){
@@ -259,7 +293,7 @@ function prepareMealRecordForm(date=''){
 function openMealRecord(date=localDateKey(),type=mealTypeByTime()){
   setActiveMealType(type);const form=$('#manualMealForm');form.reset();delete form.dataset.editingId;clearMealNutritionState(form);form.elements.type.value=type;prepareMealRecordForm(date);form.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';openModal('manualMealModal');
 }
-function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference'])delete form.dataset[key]}
+function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1'}
 function daysBetween(a,b){ return Math.max(1,Math.ceil((new Date(b)-new Date(a))/86400000)); }
 function calculateProfile(profile){
   const h=profile.height/100;
@@ -272,7 +306,14 @@ function calculateProfile(profile){
   const requiredDeficit=Math.max(0,Math.round((profile.weight-profile.targetWeight)*7700/days)),theoreticalTarget=tdee-requiredDeficit,dailyTarget=Math.max(0,theoreticalTarget+(Number(profile.budgetAdjustmentKcal)||0)),actualDeficit=Math.max(0,tdee-dailyTarget),loss=Math.max(0,profile.weight-profile.targetWeight),estimatedDays=loss===0?0:actualDeficit>0?Math.ceil(loss*7700/actualDeficit):null,estimatedDate=estimatedDays==null?null:localDateKey(new Date(Date.now()+estimatedDays*86400000));
   return {bmi,targetBmi,days,weekly,tdee,requiredDeficit,theoreticalTarget,dailyTarget,actualDeficit,estimatedDays,estimatedDate,protein:Math.round(profile.weight*1.3)};
 }
-function saveUser(){ if(userData)localStorage.setItem(STORAGE_KEY,JSON.stringify(userData)); scheduleServerSync(); }
+function saveUser(){
+  if(userData){
+    if(!DEMO_MODE&&accountReady&&(syncPaused||localStorage.getItem(STORAGE_KEY)!==lastStoredSnapshot))return preserveConflict();
+    lastStoredSnapshot=JSON.stringify(userData);localStorage.setItem(STORAGE_KEY,lastStoredSnapshot);
+    if(!DEMO_MODE&&accountReady)setSyncMetadata(true);
+  }
+  scheduleServerSync();
+}
 function loadUser(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY))}catch{return null} }
 function todayMeals(){ return (userData?.mealLogs||[]).filter(x=>x.date===localDateKey()); }
 function mealTypeByTime(){const h=new Date().getHours();return h<10?'早餐':h<16?'午餐':'晚餐'}
@@ -286,6 +327,7 @@ function habitWithoutOldTaste(value=''){return String(value).split(/[、,，;；
 function migrateTasteProfile(profile){if(!profile)return false;let changed=false;if(!profile.tastePreference){const old=String(profile.preferences||'');profile.tastePreference=/重辣|特辣/.test(old)?'重辣':/中辣|爱吃辣|喜欢吃辣|喜欢辣/.test(old)?'中辣':/微辣/.test(old)?'微辣':'不辣';changed=true}const cleaned=removeTastePreferenceClauses(profile.preferences);if(cleaned!==String(profile.preferences||'')){profile.preferences=cleaned;changed=true}return changed}
 
 function initOnboarding(){
+  $('#onboarding').classList.remove('hidden');
   const date=new Date();date.setDate(date.getDate()+30);
   const dateInput=$('[name="targetDate"]');dateInput.min=localDateKey(new Date(Date.now()+86400000));dateInput.value=localDateKey(date);
   renderOnboardingStep();
@@ -315,7 +357,7 @@ $('#prevStep').addEventListener('click',()=>{onboardingStep=Math.max(1,onboardin
 $('#onboardingForm').addEventListener('submit',e=>{
   e.preventDefault();if(!validateStep(3))return;
   const profile=onboardingValues();
-  userData={profile,weightLogs:[{date:localDateKey(),weight:profile.weight,createdAt:new Date().toISOString()}],mealLogs:[],chatHistory:[],createdAt:new Date().toISOString()};
+  userData={profile,weightLogs:[{date:localDateKey(),weight:profile.weight,createdAt:new Date().toISOString()}],mealLogs:[],chatHistory:[],weeklyPlan:null,pendingWeeklyPlan:null,upcomingWeeklyPlan:null,weeklyPlanHistory:[],dayClosures:[],reminderSettings:{enabled:false,maxPerDay:3,quietStart:'22:00',quietEnd:'08:00'},menuImports:[],createdAt:new Date().toISOString()};
   saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showToast('建档完成，Agent已生成你的第一份计划');
 });
 
@@ -346,7 +388,7 @@ function hydrateApp(){
   $('.trend-summary').innerHTML=`<article><small>当前体重</small><strong>${latest.toFixed(1)} <i>kg</i></strong><span>当前BMI ${(latest/((p.height/100)**2)).toFixed(2)}</span></article><article><small>记录次数</small><strong>${weights.length}</strong><span>${weights.length<7?'积累7条后分析趋势':'可分析7日趋势'}</span></article><article><small>理论目标速度</small><strong>${m.weekly.toFixed(2)} <i>kg/周</i></strong><span>按剩余日期反推</span></article><article><small>目标BMI</small><strong>${m.targetBmi.toFixed(2)}</strong><span>由目标体重计算</span></article>`;
   renderRecordStatus();
   $('.date-block small').textContent=new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'}).format(new Date());
-  renderMealLogs();renderMealHistory();renderDailyMealPlan();updateDashboard();
+  renderMealLogs();renderMealHistory();renderDailyMealPlan();updateDashboard();if(typeof window.refreshAdaptivePlan==='function')window.refreshAdaptivePlan();
 }
 function escapeHtml(v){const d=document.createElement('div');d.textContent=String(v);return d.innerHTML}
 function extractCuisinePreference(text){return ['中餐','东北菜','川菜','湘菜','粤菜','火锅','烧烤','日料','日本料理','韩餐','西餐','面食','轻食'].find(type=>String(text).includes(type))||''}
@@ -370,7 +412,7 @@ async function loadDailyNearbyRecommendations(plan,meals,request){
 
 async function renderDailyMealPlan(force=false){
   if(!userData||!$('#dailyMealPlanGrid'))return;const meals=todayMeals(),key=JSON.stringify({date:localDateKey(),weight:userData.profile.weight,targetWeight:userData.profile.targetWeight,targetDate:userData.profile.targetDate,activity:userData.profile.activity,preferences:userData.profile.preferences,dislikedFoods:userData.profile.dislikedFoods,allergies:userData.profile.allergies,meals:meals.map(x=>[x.id,x.type,x.name,x.calories,x.protein,x.status])});if(!force&&state.dailyMealPlanKey===key&&$('#dailyMealPlanGrid').children.length)return;state.dailyMealPlanKey=key;const request=++state.dailyMealPlanRequest;$('#dailyMealPlanStatus').textContent='正在生成';$('#dailyMealPlanSummary').textContent='正在生成DIY菜谱，并准备根据定位匹配附近外食…';$('#dailyMealPlanGrid').innerHTML='<div class="agent-working"><span class="loader"></span><div><strong>生成今日三餐</strong><p>动态预算 → DIY菜谱 → 附近门店与餐食</p></div></div>';
-  try{const data=await apiFetch('/api/plans/daily-meals',{method:'POST',body:JSON.stringify({profile:userData.profile,today:{calories:meals.reduce((sum,x)=>sum+(Number(x.calories)||0),0),protein:meals.reduce((sum,x)=>sum+(Number(x.protein)||0),0),meals}})});if(request!==state.dailyMealPlanRequest)return;const plan=data.result;$('#dailyMealPlanStatus').textContent=plan.generatedBy==='qwen'?'Agent已生成':'规则建议';$('#dailyMealPlanSummary').textContent=`今日理论目标 ${formatNumber(plan.dailyTarget)} kcal · 已记录 ${formatNumber(plan.consumedKcal)} kcal · 剩余 ${formatNumber(plan.remainingKcal)} kcal${plan.otherConsumedKcal?` · 其他摄入已扣除 ${formatNumber(plan.otherConsumedKcal)} kcal`:''}`;$('#dailyMealPlanGrid').innerHTML=plan.meals.map(meal=>{const icon=meal.type==='早餐'?'☀':meal.type==='午餐'?'◐':'☾',completed=meal.status==='recorded'||meal.status==='skipped';if(completed)return `<div class="daily-meal-card recorded"><div class="daily-meal-card-head"><span>${icon}</span><strong>${meal.type}</strong><small>${meal.status==='skipped'?'未吃':'已记录'}</small></div><h3>${escapeHtml(meal.name)}</h3><p>${escapeHtml(meal.description)}</p></div>`;const diy=meal.diy||{},ingredients=(diy.ingredients||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join(''),steps=(diy.steps||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('');return `<div class="daily-meal-card"><div class="daily-meal-card-head"><span>${icon}</span><strong>${meal.type}</strong><small>建议约 ${formatNumber(meal.mealKcal)} kcal</small></div><section class="daily-option diy-option"><b>在家 DIY</b><h3>${escapeHtml(diy.name||meal.name)}</h3><div class="daily-recipe"><div><small>食材</small><ul>${ingredients}</ul></div><div><small>步骤</small><ol>${steps}</ol></div></div><button type="button" data-plan-diy="${meal.type}">用现有食材重新规划</button></section><section class="daily-option outside-option"><b>附近外食</b><div data-daily-nearby="${meal.type}"><small>等待定位…</small></div></section></div>`}).join('');$$('[data-plan-diy]').forEach(button=>button.onclick=()=>{setActiveMealType(button.dataset.planDiy,0);refreshMealModalTitles();openModal('diyModal')});loadDailyNearbyRecommendations(plan,meals,request)}catch(error){if(request!==state.dailyMealPlanRequest)return;state.dailyMealPlanKey='';$('#dailyMealPlanStatus').textContent='生成失败';$('#dailyMealPlanSummary').textContent=`暂时无法生成今日三餐：${error.message}`;$('#dailyMealPlanGrid').innerHTML='<button type="button" class="secondary-btn" id="retryDailyMealPlan">重新生成</button>';$('#retryDailyMealPlan').onclick=()=>renderDailyMealPlan(true)}
+  try{const data=await apiFetch('/api/plans/daily-meals',{method:'POST',body:JSON.stringify({profile:userData.profile,today:{calories:meals.reduce((sum,x)=>sum+(Number(x.calories)||0),0),protein:meals.reduce((sum,x)=>sum+(Number(x.protein)||0),0),meals}})});if(request!==state.dailyMealPlanRequest)return;const plan=data.result;$('#dailyMealPlanStatus').textContent=plan.generatedBy==='qwen'?'Agent已生成':'规则建议';$('#dailyMealPlanSummary').textContent=plan.budgetStatus==='exhausted'?`今日理论参考 ${formatNumber(plan.dailyTarget)} kcal · 已记录 ${formatNumber(plan.consumedKcal)} kcal；未执行餐次保持规律，不做补偿性归零，也不扣减明日目标`:`今日理论目标 ${formatNumber(plan.dailyTarget)} kcal · 已记录 ${formatNumber(plan.consumedKcal)} kcal · 剩余 ${formatNumber(plan.remainingKcal)} kcal${plan.otherConsumedKcal?` · 其他摄入已扣除 ${formatNumber(plan.otherConsumedKcal)} kcal`:''}`;$('#dailyMealPlanGrid').innerHTML=plan.meals.map(meal=>{const icon=meal.type==='早餐'?'☀':meal.type==='午餐'?'◐':'☾',completed=meal.status==='recorded'||meal.status==='skipped';if(completed)return `<div class="daily-meal-card recorded"><div class="daily-meal-card-head"><span>${icon}</span><strong>${meal.type}</strong><small>${meal.status==='skipped'?'未吃':'已记录'}</small></div><h3>${escapeHtml(meal.name)}</h3><p>${escapeHtml(meal.description)}</p></div>`;const diy=meal.diy||{},ingredients=(diy.ingredients||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join(''),steps=(diy.steps||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join(''),mealTarget=meal.guidanceOnly?'正常餐次参考，不设补偿性上限':`当前建议约 ${formatNumber(meal.mealKcal)} kcal`;return `<div class="daily-meal-card"><div class="daily-meal-card-head"><span>${icon}</span><strong>${meal.type}</strong><small>${mealTarget}</small></div>${meal.adjustmentReason?`<p>${escapeHtml(meal.adjustmentReason)}</p>`:''}<section class="daily-option diy-option"><b>在家 DIY</b><h3>${escapeHtml(diy.name||meal.name)}</h3><div class="daily-recipe"><div><small>食材</small><ul>${ingredients}</ul></div><div><small>步骤</small><ol>${steps}</ol></div></div><button type="button" data-plan-diy="${meal.type}">用现有食材重新规划</button></section><section class="daily-option outside-option"><b>附近外食</b><div data-daily-nearby="${meal.type}"><small>等待定位…</small></div></section></div>`}).join('');$$('[data-plan-diy]').forEach(button=>button.onclick=()=>{setActiveMealType(button.dataset.planDiy,0);refreshMealModalTitles();openModal('diyModal')});loadDailyNearbyRecommendations(plan,meals,request)}catch(error){if(request!==state.dailyMealPlanRequest)return;state.dailyMealPlanKey='';$('#dailyMealPlanStatus').textContent='生成失败';$('#dailyMealPlanSummary').textContent=`暂时无法生成今日三餐：${error.message}`;$('#dailyMealPlanGrid').innerHTML='<button type="button" class="secondary-btn" id="retryDailyMealPlan">重新生成</button>';$('#retryDailyMealPlan').onclick=()=>renderDailyMealPlan(true)}
 }
 
 function renderMealHistory(){
@@ -384,12 +426,12 @@ function renderMealHistory(){
   $$('[data-skip-history-type]').forEach(button=>button.onclick=()=>markMealSkipped(date,button.dataset.skipHistoryType));
 }
 function mealHistoryEmptyRow(type){return `<div class="meal-row empty"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>未记录</p></div><div class="meal-history-actions"><button type="button" data-add-history-type="${type}">补登</button><button type="button" data-skip-history-type="${type}">未吃</button></div></div>`}
-function mealHistoryRecordRow(x){const type=normalizeClientMealType(x.type)||x.type;if(x.status==='skipped')return `<div class="meal-row empty skipped"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${escapeHtml(type)}</strong><p>本餐未吃 · 已确认</p></div><div class="meal-history-actions"><button type="button" data-delete-history-meal="${x.id}">撤销</button></div></div>`;return `<div class="meal-row"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':type==='晚餐'?'dinner':'snack'}">${type==='早餐'?'☀':type==='午餐'?'◐':type==='晚餐'?'☾':'◇'}</span><div><strong>${escapeHtml(type)}</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit||'g')}`:''}${x.source==='manual_backfill'?' · 补登':''}</p></div><span><strong>${Number(x.calories)||0}</strong><small>kcal · ${Number(x.protein)||0}g蛋白质</small></span><div class="meal-history-actions"><button type="button" data-edit-history-meal="${x.id}">修改</button><button type="button" data-delete-history-meal="${x.id}">删除</button></div></div>`}
+function mealHistoryRecordRow(x){const type=normalizeClientMealType(x.type)||x.type;if(x.status==='skipped')return `<div class="meal-row empty skipped"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${escapeHtml(type)}</strong><p>本餐未吃 · 已确认</p></div><div class="meal-history-actions"><button type="button" data-delete-history-meal="${x.id}">撤销</button></div></div>`;return `<div class="meal-row"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':type==='晚餐'?'dinner':'snack'}">${type==='早餐'?'☀':type==='午餐'?'◐':type==='晚餐'?'☾':'◇'}</span><div><strong>${escapeHtml(type)}</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}${x.source==='manual_backfill'?' · 补登':''}</p></div><span><strong>${Number(x.calories)||0}</strong><small>kcal · ${x.proteinKnown===false?'蛋白质未知':`${Number(x.protein)||0}g蛋白质`}</small></span><div class="meal-history-actions"><button type="button" data-edit-history-meal="${x.id}">修改</button><button type="button" data-delete-history-meal="${x.id}">删除</button></div></div>`}
 function markMealSkipped(date,type){
   if(!userData||!['早餐','午餐','晚餐'].includes(type)||date>localDateKey())return;const existing=(userData.mealLogs||[]).some(x=>x.date===date&&normalizeClientMealType(x.type)===type);if(existing)return showToast(`${dateDisplay(date)}${type}已有记录，请先修改或删除原记录`);const now=new Date().toISOString();userData.mealLogs.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),date,type,name:'本餐未吃',calories:0,protein:0,status:'skipped',source:date<localDateKey()?'meal_skipped_backfill':'meal_skipped',recordedAt:now,createdAt:now});state.mealHistoryDate=date;saveUser();hydrateApp();addTrace('✓',`标记${dateDisplay(date)}${type}未吃`,'skip_meal',`${date} · ${type}`);showToast(`已标记${dateDisplay(date)}${type}未吃`)
 }
 function editMealRecord(id){
-  const log=userData?.mealLogs?.find(x=>x.id===id);if(!log)return;const form=$('#manualMealForm');form.reset();clearMealNutritionState(form);form.dataset.editingId=id;form.elements.date.value=log.date;form.elements.type.value=normalizeClientMealType(log.type)||'其他摄入';form.elements.name.value=log.name;form.elements.grams.value=log.amount||100;if(form.elements.unit)form.elements.unit.value=log.unit||'g';form.elements.calories.value=log.calories;form.elements.protein.value=log.protein||0;prepareMealRecordForm(log.date);form.querySelector('[type="submit"]').textContent='保存修改';openModal('manualMealModal');
+  const log=userData?.mealLogs?.find(x=>x.id===id);if(!log)return;const form=$('#manualMealForm');form.reset();clearMealNutritionState(form);form.dataset.editingId=id;form.elements.date.value=log.date;form.elements.type.value=normalizeClientMealType(log.type)||'其他摄入';form.elements.name.value=log.name;form.elements.grams.value=log.amount||100;if(form.elements.unit)form.elements.unit.value=log.unit||'g';form.elements.calories.value=log.calories;form.elements.protein.value=log.proteinKnown===false?'':log.protein||0;if(log.unit==='serving'){form.elements.grams.min='0.1';form.elements.grams.step='0.1'}prepareMealRecordForm(log.date);form.querySelector('[type="submit"]').textContent='保存修改';openModal('manualMealModal');
 }
 
 $('#mealHistoryPrev').onclick=()=>{state.mealHistoryDate=shiftDateKey(state.mealHistoryDate||localDateKey(),-1);renderMealHistory()};
@@ -400,7 +442,7 @@ $('#mealHistoryAdd').onclick=()=>openMealRecord(state.mealHistoryDate||localDate
 
 function renderMealLogs(){
   if(!userData)return;const meals=todayMeals(),list=$('#mealList');
-  const rows=[];for(const type of ['早餐','午餐','晚餐']){const records=meals.filter(x=>normalizeClientMealType(x.type)===type);if(!records.length)rows.push(`<div class="meal-row empty"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>未记录</p></div><div class="meal-history-actions"><button data-add-today-type="${type}">记录</button><button data-skip-today-type="${type}">未吃</button></div></div>`);else rows.push(...records.map(x=>x.status==='skipped'?`<div class="meal-row empty skipped"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>本餐未吃 · 已确认</p></div><button data-delete-meal="${x.id}">撤销</button></div>`:`<div class="meal-row"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.protein}g蛋白质</small></span><button data-delete-meal="${x.id}">×</button></div>`))}const other=meals.filter(x=>normalizeClientMealType(x.type)==='其他摄入');rows.push(...other.map(x=>`<div class="meal-row"><span class="meal-emoji snack">◇</span><div><strong>其他摄入</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.protein}g蛋白质</small></span><button data-delete-meal="${x.id}">×</button></div>`));list.innerHTML=rows.join('');
+  const rows=[];for(const type of ['早餐','午餐','晚餐']){const records=meals.filter(x=>normalizeClientMealType(x.type)===type);if(!records.length)rows.push(`<div class="meal-row empty"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>未记录</p></div><div class="meal-history-actions"><button data-add-today-type="${type}">记录</button><button data-skip-today-type="${type}">未吃</button></div></div>`);else rows.push(...records.map(x=>x.status==='skipped'?`<div class="meal-row empty skipped"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>本餐未吃 · 已确认</p></div><button data-delete-meal="${x.id}">撤销</button></div>`:`<div class="meal-row"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.protein}g蛋白质</small></span><button data-delete-meal="${x.id}">×</button></div>`))}const other=meals.filter(x=>normalizeClientMealType(x.type)==='其他摄入');rows.push(...other.map(x=>`<div class="meal-row"><span class="meal-emoji snack">◇</span><div><strong>其他摄入</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.protein}g蛋白质</small></span><button data-delete-meal="${x.id}">×</button></div>`));list.innerHTML=rows.join('');
   $$('[data-add-today-type]').forEach(button=>button.onclick=()=>openMealRecord(localDateKey(),button.dataset.addTodayType));
   $$('[data-skip-today-type]').forEach(button=>button.onclick=()=>markMealSkipped(localDateKey(),button.dataset.skipTodayType));
   $$('[data-delete-meal]').forEach(b=>b.onclick=()=>{userData.mealLogs=userData.mealLogs.filter(x=>x.id!==b.dataset.deleteMeal);saveUser();hydrateApp();showToast('这条饮食记录已删除')});
@@ -412,7 +454,11 @@ replaceButton('#quickLogBtn',()=>openMealRecord());
 replaceButton('#addMealBtn',()=>openMealRecord());
 $('#manualMealForm').addEventListener('submit',e=>{
   e.preventDefault();const f=new FormData(e.target),date=String(f.get('date')||localDateKey()),recordedAt=new Date().toISOString(),isBackfill=date<localDateKey(),editingId=e.target.dataset.editingId,existing=editingId?userData.mealLogs.find(x=>x.id===editingId):null,log={id:editingId||(crypto.randomUUID?crypto.randomUUID():String(Date.now())),date,type:f.get('type'),name:f.get('name'),amount:+f.get('grams')||null,unit:f.get('unit')||'g',calories:+f.get('calories'),protein:+f.get('protein')||0,source:isBackfill?'manual_backfill':'manual',recordedAt,createdAt:existing?.createdAt||recordedAt};
-  if(existing)Object.assign(existing,log);else userData.mealLogs.push(log);state.mealHistoryDate=date;saveUser();rememberAgent('meal_confirmed',{name:log.name,calories:log.calories,protein:log.protein,mealType:log.type,source:log.source});e.target.reset();delete e.target.dataset.editingId;clearMealNutritionState(e.target);e.target.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';state.activeMealType='';state.activeMealDayOffset=0;closeModals();hydrateApp();addTrace('✓',`${editingId?'修改':isBackfill?'补登':'记录'}${dateDisplay(date)}饮食`,'save_meal_log',`${log.name} · ${log.amount||'?'}${log.unit} · ${log.calories} kcal`);showToast(`${dateDisplay(date)}饮食已${editingId?'修改':'保存'}${isBackfill&&!editingId?'（补登）':''}`);
+  if(existing?.nutritionSource&&existing.nutritionSource!==e.target.dataset.nutritionSource){
+    const changed=['name','calories','protein','amount','unit'].some(key=>existing[key]!==log[key]);
+    if(changed){for(const key of ['nutritionSource','nutritionSourceUrl','referenceId','referenceLabel'])delete existing[key];existing.proteinKnown=e.target.elements.protein.value!==''}else log.source=existing.source;
+  }
+  if(existing)Object.assign(existing,log);else userData.mealLogs.push(log);state.mealHistoryDate=date;saveUser();rememberAgent('meal_confirmed',{name:log.name,calories:log.calories,protein:log.protein,mealType:log.type,source:log.source});e.target.reset();delete e.target.dataset.editingId;clearMealNutritionState(e.target);e.target.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';state.activeMealType='';state.activeMealDayOffset=0;closeModals();hydrateApp();addTrace('✓',`${editingId?'修改':isBackfill?'补登':'记录'}${dateDisplay(date)}饮食`,'save_meal_log',`${log.name} · ${log.amount||'?'}${log.unit==='serving'?'份':log.unit} · ${log.calories} kcal`);showToast(`${dateDisplay(date)}饮食已${editingId?'修改':'保存'}${isBackfill&&!editingId?'（补登）':''}`);
 });
 
 // Persist weight entries made through the existing weight dialog.
@@ -443,7 +489,7 @@ preferencesForm.addEventListener('submit',e=>{e.preventDefault();if(!userData||!
 // Real LLM conversation with controlled UI actions.
 const agentConversation=[];
 function persistAgentConversation(){if(!userData)return;userData.chatHistory=agentConversation.slice(-100);saveUser()}
-function restoreAgentConversation(){agentConversation.length=0;const saved=(Array.isArray(userData?.chatHistory)?userData.chatHistory:[]).slice(-100);agentConversation.push(...saved);if(!saved.length)return;const box=$('#chatMessages');box.innerHTML='';for(const item of saved){const message=addMessage(item.content,item.role==='user',item.role==='assistant'?(item.meta||'历史对话'):(item.meta||new Date(item.createdAt||Date.now()).toLocaleString('zh-CN')));if(item.role==='assistant'&&item.action?.type==='open_meal_choice')addInlineMealChoices(message,item.action);if(item.role==='assistant'&&['open_diy','open_restaurants','open_manual_log'].includes(item.action?.type))addInlineToolEntry(message,item.action);if(item.role==='assistant'&&item.action?.type==='pending_meal_estimate'){const pending=currentPendingMeal();if(pending&&pending.id===item.action.pendingId)addPendingMealControls(message,pending)}if(item.role==='assistant'&&(item.action?.type==='proposal_meal'||item.action?.type==='proposal_weight'||item.action?.type==='proposal_revise'))addProposalControls(message,{kind:item.action.kind,payload:item.action.payload},item)}box.scrollTop=box.scrollHeight}
+function restoreAgentConversation(){agentConversation.length=0;const saved=(Array.isArray(userData?.chatHistory)?userData.chatHistory:[]).slice(-100);agentConversation.push(...saved);if(!saved.length)return;const box=$('#chatMessages');box.innerHTML='';for(const item of saved){const message=addMessage(item.content,item.role==='user',item.role==='assistant'?(item.meta||'历史对话'):(item.meta||new Date(item.createdAt||Date.now()).toLocaleString('zh-CN')));if(item.role==='assistant'&&item.action?.type==='open_meal_choice')addInlineMealChoices(message,item.action);if(item.role==='assistant'&&['open_diy','open_restaurants','open_manual_log'].includes(item.action?.type))addInlineToolEntry(message,item.action);if(item.role==='assistant'&&item.action?.type==='pending_meal_estimate'){const pending=currentPendingMeal();if(pending&&pending.id===item.action.pendingId)addPendingMealControls(message,pending)}if(item.role==='assistant'&&['proposal_meal','proposal_weight','proposal_revise'].includes(item.action?.type))addProposalControls(message,{kind:item.action.kind,payload:item.action.payload},item)}box.scrollTop=box.scrollHeight}
 $('#clearChat').onclick=()=>{agentConversation.length=0;if(userData){userData.chatHistory=[];saveUser()}$('#chatMessages').innerHTML='';showToast('当前对话已清空，长期健康档案仍保留')};
 function calculateVisionEstimate(result={}){
   let total=0,protein=0,known=0;const items=(result.foods||[]).map(food=>{const gramsMin=Math.max(1,Number(food.portionGramsMin)||Number(food.portionGrams)||0),gramsMax=Math.max(gramsMin,Number(food.portionGramsMax)||Number(food.portionGrams)||gramsMin),gramsEstimate=Math.round((gramsMin+gramsMax)/2),nutrition=food.nutrition;if(!nutrition)return {...food,gramsEstimate,kcalText:'营养数据未匹配'};const n=nutrition.per100g,kcalPer100=n.kcal||0,kcalEstimate=Math.round(kcalPer100*gramsEstimate/100);total+=kcalEstimate;protein+=(n.protein||0)*gramsEstimate/100;known++;return {...food,gramsEstimate,kcalEstimate,kcalText:`约 ${kcalEstimate} kcal`}});return {items,total,protein,known}
@@ -499,17 +545,46 @@ async function locationForAgentPrompt(prompt,typing){
   catch(error){addToolEvent('browser_geolocation','未获取位置，将改用城市/商圈搜索');return null;}
 }
 handleAgentPrompt = async function(prompt){
-  if(!userData)return showToast('请先完成建档');const historyForModel=agentConversation.slice(-24).map(({role,content})=>({role,content})),now=new Date().toISOString();addMessage(prompt,true);agentConversation.push({role:'user',content:prompt,createdAt:now});persistAgentConversation();const typing=document.createElement('div');typing.className='message agent-message';typing.innerHTML=`<span class="agent-orb tiny"></span><div><p>正在读取长期记忆、近期对话和真实记录…</p></div>`;$('#chatMessages').appendChild(typing);$('#chatMessages').scrollTop=$('#chatMessages').scrollHeight;
+  if(!userData)return showToast('请先完成建档');const historyForModel=agentConversation.filter(item=>item.scope!=='health').slice(-24).map(({role,content})=>({role,content})),now=new Date().toISOString();addMessage(prompt,true);agentConversation.push({role:'user',content:prompt,createdAt:now});persistAgentConversation();const typing=document.createElement('div');typing.className='message agent-message';typing.innerHTML=`<span class="agent-orb tiny"></span><div><p>正在读取长期记忆、近期对话和真实记录…</p></div>`;$('#chatMessages').appendChild(typing);$('#chatMessages').scrollTop=$('#chatMessages').scrollHeight;
   try{
-    const location=await locationForAgentPrompt(prompt,typing),d=await apiFetch('/api/agent/chat',{method:'POST',body:JSON.stringify({message:prompt,history:historyForModel,profile:userData.profile,weightLogs:userData.weightLogs||[],todayMeals:todayMeals(),pendingMeal:currentPendingMeal(),clientId:CLIENT_ID,location})}),r=d.result;for(const tool of r.trace||[])addToolEvent(tool,tool==='qwen_chat'?'模型已生成回答':'已读取真实状态');typing.remove();const answer=r.answer;
-    const proposal=r.proposal||null,meta=DEMO_MODE?`预置演示 · ${r.intent||'general'}`:`真实LLM · ${r.intent||'general'}`,responseMessage=addMessage(answer,false,meta);if(proposal)addProposalControls(responseMessage,proposal);agentConversation.push({role:'assistant',content:answer,action:proposal?{type:'proposal_'+proposal.kind,kind:proposal.kind,payload:proposal.payload}:r.action||null,meta,createdAt:new Date().toISOString()});if(agentConversation.length>100)agentConversation.splice(0,agentConversation.length-100);persistAgentConversation();const cuisine=r.action?.cuisine||'';if(cuisine)state.mealRequest=cuisine;if(r.action?.mealType)setActiveMealType(r.action.mealType,r.action.dayOffset);state.restaurantRadius=Math.min(5000,Math.max(100,Number(r.action?.radiusMeters)||3000));state.restaurantArea=String(r.action?.area||'').trim();state.restaurantRequestedCount=Math.min(20,Math.max(1,Number(r.action?.requestedCount)||5));if(r.action?.type==='open_meal_choice')addInlineMealChoices(responseMessage,r.action);else if(['open_diy','open_restaurants','open_manual_log'].includes(r.action?.type))addInlineToolEntry(responseMessage,r.action)
+    const location=await locationForAgentPrompt(prompt,typing),weeklyPlan=typeof window.getCurrentAdaptivePlan==='function'?window.getCurrentAdaptivePlan():(userData.weeklyPlan||null),d=await apiFetch('/api/agent/chat',{method:'POST',body:JSON.stringify({message:prompt,history:historyForModel,profile:userData.profile,weightLogs:userData.weightLogs||[],todayMeals:todayMeals(),pendingMeal:currentPendingMeal(),weeklyPlan,clientId:CLIENT_ID,location})}),r=d.result;for(const tool of r.trace||[])addToolEvent(tool,tool==='qwen_chat'?'模型已生成回答':'已读取真实状态');typing.remove();const answer=r.answer;
+    const proposal=r.proposal||null,meta=DEMO_MODE?`预置演示 · ${r.intent||'general'}`:`真实LLM · ${r.intent||'general'}`,responseMessage=addMessage(answer,false,meta),responseItem={role:'assistant',content:answer,action:proposal?{type:'proposal_'+proposal.kind,kind:proposal.kind,payload:proposal.payload}:r.action||null,meta,createdAt:new Date().toISOString()};if(proposal)addProposalControls(responseMessage,proposal,responseItem);agentConversation.push(responseItem);if(agentConversation.length>100)agentConversation.splice(0,agentConversation.length-100);persistAgentConversation();const cuisine=r.action?.cuisine||'';if(cuisine)state.mealRequest=cuisine;if(r.action?.mealType)setActiveMealType(r.action.mealType,r.action.dayOffset);state.restaurantRadius=Math.min(5000,Math.max(100,Number(r.action?.radiusMeters)||3000));state.restaurantArea=String(r.action?.area||'').trim();state.restaurantRequestedCount=Math.min(20,Math.max(1,Number(r.action?.requestedCount)||5));if(r.action?.type==='open_meal_choice')addInlineMealChoices(responseMessage,r.action);else if(['open_diy','open_restaurants','open_manual_log'].includes(r.action?.type))addInlineToolEntry(responseMessage,r.action)
   }catch(e){typing.remove();const errorText=`真实模型调用失败：${e.message}`;addMessage(errorText,false,'服务错误');agentConversation.push({role:'assistant',content:errorText,meta:'服务错误',createdAt:new Date().toISOString()});persistAgentConversation()}
 };
 
-userData=loadUser();
-if(DEMO_MODE){document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;}
-if(userData){$('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation()}else{initOnboarding()}
-loadServerUser();pollAgent();runDailyReview();connectAgentEvents();
+if(DEMO_MODE){
+  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#authGate').hidden=true;document.body.classList.remove('account-loading');$('#restartBtn').hidden=false;
+  $('#onboardingDataNote').textContent='演示数据只保存在当前浏览器中。完成建档后即可体验预置交互。';$('#onboardingStoragePoint').textContent='✓ 本地保存，可随时清除';
+  userData=loadUser();if(userData){$('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation()}else initOnboarding();
+  loadServerUser();pollAgent();runDailyReview();connectAgentEvents();
+}else{
+  window.XiaofanAccount.boot({
+    legacy:()=>{try{return JSON.parse(localStorage.getItem('fitpilot_user_v3'))}catch{return null}},
+    ready(account,remote){
+      STORAGE_KEY=`fitpilot_account_${account.id}`;CLIENT_ID=account.id;accountVersion=remote.stateVersion;accountReady=true;
+      lastStoredSnapshot=localStorage.getItem(STORAGE_KEY);
+      const pending=pendingSnapshot(),cached=pending?.state||loadUser(),meta=pending?{dirty:true,version:pending.version}:syncMetadata();
+      if(cached?.profile?.age&&meta.dirty){
+        userData=cached;
+        if(pending||meta.version!==accountVersion){accountVersion=meta.version;preserveConflict()}
+        else{syncStatus('saving','正在恢复未同步修改…');scheduleServerSync()}
+        $('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation();
+      }else{
+        setSyncMetadata(false);
+        if(remote.state?.profile?.age)adoptServerState(remote.state);else{userData=null;localStorage.removeItem(STORAGE_KEY);lastStoredSnapshot=null;initOnboarding()}
+        syncStatus('saved','已连接云端');
+      }
+      pollAgent();runDailyReview();connectAgentEvents();
+    },
+    local:()=>userData,dirty:syncDirty,flush:syncUserToServer,
+    replace(remote){
+      clearTimeout(serverSyncTimer);localStorage.removeItem(pendingKey());accountVersion=remote.stateVersion;syncPaused=false;setSyncMetadata(false);
+      if(remote.state?.profile?.age)adoptServerState(remote.state);else{localStorage.removeItem(STORAGE_KEY);lastStoredSnapshot=null;userData=null;agentConversation.length=0;initOnboarding()}
+      syncStatus('saved','已载入云端数据');
+    },
+    forget(){clearTimeout(serverSyncTimer);accountReady=false;userData=null;agentEventSource?.close();localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(STORAGE_KEY+'_sync');localStorage.removeItem(pendingKey())}
+  });
+}
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 const adjustGoalForm=$('#adjustGoalForm');
@@ -524,7 +599,7 @@ adjustGoalForm.addEventListener('submit',e=>{e.preventDefault();if(!userData||!e
 // --- Real backend integrations ---
 let serviceStatus={qwen:false,usda:false,amap:false,openFoodFacts:true};
 const portionForm=$('#manualMealForm'),portionInput=portionForm.elements.grams,portionLabel=portionInput.closest('label'),portionControl=document.createElement('div'),portionUnit=document.createElement('select');
-portionUnit.name='unit';portionUnit.setAttribute('aria-label','份量单位');portionUnit.innerHTML='<option value="g">g</option><option value="ml">ml</option>';portionControl.className='portion-control';portionControl.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:end';portionInput.replaceWith(portionControl);portionControl.append(portionInput,portionUnit);portionLabel.firstChild.textContent='大约份量';
+portionUnit.name='unit';portionUnit.setAttribute('aria-label','份量单位');portionUnit.innerHTML='<option value="g">g</option><option value="ml">ml</option><option value="serving">份</option>';portionControl.className='portion-control';portionControl.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:end';portionInput.replaceWith(portionControl);portionControl.append(portionInput,portionUnit);portionLabel.firstChild.textContent='大约份量';
 $('#manualMealForm').elements.protein.step='0.1';
 function demoPayload(options={}){try{return options.body?JSON.parse(options.body):{}}catch{return {}}}
 function demoFood(name='鸡胸肉'){
@@ -534,8 +609,8 @@ function demoFood(name='鸡胸肉'){
   return {name:key||'鸡胸肉',category:'演示食材',per100g:hit,source:{type:'预置演示营养数据',url:null},confidence:'medium'};
 }
 function demoTargets({profile={},today={},mealType='' }={}){
-  const type=normalizeClientMealType(mealType)||mealTypeByTime(),dailyTarget=Math.max(1200,Math.round(Number(state.theoreticalTarget)||Number(state.energyTarget)||1500)),consumed=Math.max(0,Math.round(Number(today.calories)||0)),remaining=Math.max(0,dailyTarget-consumed),index=['早餐','午餐','晚餐'].indexOf(type),futureMeals=['早餐','午餐','晚餐'].slice(Math.max(0,index+1));
-  return {mealType:type,dailyTarget,consumedKcal:consumed,remainingKcal:remaining,reservedKcal:Math.round(remaining*.45),mealKcal:Math.max(280,Math.round(remaining/(futureMeals.length+1))),futureMeals,budgetStatus:remaining<250?'low':'normal'};
+  const type=normalizeClientMealType(mealType)||mealTypeByTime(),dailyTarget=Math.max(1200,Math.round(Number(state.theoreticalTarget)||Number(state.energyTarget)||1500)),consumed=Math.max(0,Math.round(Number(today.calories)||0)),remaining=Math.max(0,dailyTarget-consumed),index=['早餐','午餐','晚餐'].indexOf(type),futureMeals=['早餐','午餐','晚餐'].slice(Math.max(0,index+1)),exhausted=remaining<=0,mealKcal=exhausted?Math.round(dailyTarget*({早餐:.25,午餐:.4,晚餐:.35}[type]||.35)):Math.max(280,Math.round(remaining/(futureMeals.length+1)));
+  return {mealType:type,dailyTarget,consumedKcal:consumed,remainingKcal:remaining,reservedKcal:exhausted?0:Math.round(remaining*.45),mealKcal,futureMeals,budgetStatus:exhausted?'exhausted':remaining<250?'low':'normal',recommendationMode:exhausted?'regular_meal_no_compensation':'remaining_budget',guidance:exhausted?'今日理论参考已超出；本餐按正常餐次提供参考，不通过跳餐或次日扣减补偿。':''};
 }
 function demoRecipe(payload={}){
   const names=(Array.isArray(payload.ingredients)?payload.ingredients:[]).map(x=>String(x).trim()).filter(Boolean).slice(0,4),selected=(names.length?names:['鸡胸肉','番茄','鸡蛋','米饭']).map((name,index)=>{const food=demoFood(name),grams=[120,140,55,100][index]||80;return {name:food.name,grams,kcal:Math.round(food.per100g.kcal*grams/100),protein:+(food.per100g.protein*grams/100).toFixed(1),fat:+(food.per100g.fat*grams/100).toFixed(1),carbs:+(food.per100g.carbs*grams/100).toFixed(1)}});
@@ -549,7 +624,15 @@ function demoDailyPlan(payload={}){
     {type:'午餐',mealKcal:480,name:'鸡胸肉彩蔬饭',description:'以高蛋白主菜搭配蔬菜与适量主食。',diy:{name:'鸡胸肉彩蔬饭',ingredients:['鸡胸肉 120g','番茄 140g','米饭 100g'],steps:['煎熟鸡胸肉','翻炒番茄','与米饭搭配']},status:'planned'},
     {type:'晚餐',mealKcal:420,name:'豆腐西兰花拌饭',description:'晚餐保留蛋白质，减少额外油脂。',diy:{name:'豆腐西兰花拌饭',ingredients:['豆腐 150g','西兰花 150g','米饭 80g'],steps:['焯熟西兰花','煎豆腐','拌入米饭']},status:'planned'}
   ];
-  return {dailyTarget:targets.dailyTarget,consumedKcal:targets.consumedKcal,remainingKcal:targets.remainingKcal,otherConsumedKcal:0,generatedBy:'demo',meals:planned};
+  const exhausted=targets.budgetStatus==='exhausted';return {dailyTarget:targets.dailyTarget,consumedKcal:targets.consumedKcal,remainingKcal:targets.remainingKcal,budgetStatus:targets.budgetStatus,recommendationMode:targets.recommendationMode,guidance:targets.guidance,otherConsumedKcal:0,generatedBy:'demo',meals:planned.map(meal=>({...meal,guidanceOnly:exhausted,adjustmentReason:exhausted?'今日理论参考已超出；保持规律正餐，不用跳餐或 0 热量餐补偿。':'已按最新确认记录重新分配今日剩余餐次'}))};
+}
+function demoNaturalWeek(payload={}){
+  const today=localDateKey(),anchor=new Date(`${today}T12:00:00`),day=anchor.getDay()||7,start=new Date(anchor);start.setDate(start.getDate()-(day-1));const names=['周一','周二','周三','周四','周五','周六','周日'],templates=[['鸡蛋燕麦早餐','鸡肉时蔬饭','豆腐菌菇饭'],['豆浆全麦早餐','番茄牛肉饭','清蒸鱼蔬菜餐'],['酸奶水果燕麦碗','虾仁杂粮饭','鸡蛋豆腐蔬菜汤'],['鸡蛋蔬菜三明治','瘦肉菌菇饭','番茄鸡胸肉餐'],['牛奶燕麦鸡蛋餐','鱼肉时蔬饭','豆腐西兰花饭'],['杂粮粥鸡蛋早餐','外食：优先蛋白质和蔬菜','家常鸡肉蔬菜餐'],['豆浆鸡蛋全麦餐','牛肉蔬菜饭','清淡鱼肉豆腐餐']],dailyTarget=Math.round(Number(state.energyTarget)||1500),dates=Array.from({length:7},(_,index)=>{const date=new Date(start);date.setDate(start.getDate()+index);return localDateKey(date)}),existing=payload.existingPlan||null,demoRestaurantOptions=[{name:'轻食实验室',address:'演示路 88 号',distance:420,location:'121.4737,31.2304',dish:'香煎鸡胸肉藜麦沙拉',kcal:428,protein:36},{name:'谷物食堂',address:'演示路 126 号',distance:680,location:'121.4737,31.2304',dish:'番茄牛肉饭（少饭）',kcal:465,protein:31},{name:'暖碗餐吧',address:'演示路 208 号',distance:930,location:'121.4737,31.2304',dish:'豆腐菌菇荞麦面',kcal:392,protein:24}],byMeal={};
+  const days=dates.map((date,index)=>({date,weekday:names[index],status:date===today?'today':date<today?'past':'planned',locked:false,dailyTarget,totalKcal:0,meals:date<today?[]:['早餐','午餐','晚餐'].map((type,mealIndex)=>{const name=templates[index][mealIndex],mealKcal=Math.round(dailyTarget*[.25,.4,.35][mealIndex]),mealProtein=[18,30,25][mealIndex],diy={name,minutes:type==='早餐'?12:25,ingredients:type==='早餐'?['全谷物主食 1份','鸡蛋 1个','无糖奶或豆浆 250ml','水果或蔬菜 100g']:['瘦肉、鱼虾或豆腐 120–150g','时令蔬菜 200g','熟米饭 100–150g','食用油 5g'],steps:type==='早餐'?['按标注份量准备并加热食材。','鸡蛋彻底加热，与主食和果蔬组合装盘。']:['蛋白质食材切块并彻底加热。','加入蔬菜少油烹调，搭配标注份量主食。']};byMeal[`${date}|${type}`]={...demoRestaurantOptions[(index+mealIndex)%demoRestaurantOptions.length],label:'预置演示餐厅数据',sourceTitle:'',sourceUrl:''};return {type,name,mealKcal,mealProtein,status:'planned',diy,baselineName:name,baselineMealKcal:mealKcal,baselineMealProtein:mealProtein,baselineDiy:diy}}),actualMeals:[]}));
+  return {id:`${dates[0]}-demo-v${Number(existing?.version||0)+1}`,weekStart:dates[0],weekEnd:dates[6],timezone:'Asia/Shanghai',version:Number(existing?.version||0)+1,status:'proposed',reason:payload.reason||'预置演示自然周计划',createdAt:new Date().toISOString(),days,weeklyRestaurants:{locationLabel:'上海市演示商圈（预置）',retrievedAt:new Date().toISOString(),byMeal}};
+}
+function demoMenuParse(payload={}){
+  const lines=String(payload.menuText||'热菜\n香煎鸡胸肉饭 38\n番茄牛肉饭 42\n清炒时蔬 22').split(/\n/).map(x=>x.trim()).filter(Boolean),items=lines.filter(line=>/\d/.test(line)).map(line=>{const match=line.match(/^(.+?)\s+(\d+(?:\.\d+)?)$/);return {name:match?.[1]||line,category:'菜单',price:match?Number(match[2]):null,unit:'份',description:'',confidence:'medium'}});return {restaurantName:payload.restaurantName||'演示餐馆',items,itemCount:items.length,complete:true,notes:['预置演示解析，不代表真实餐馆菜单'],source:{type:payload.imageDataUrl?'user_image':payload.menuText?'user_text':'public_url',url:payload.sourceUrl||null,label:'预置演示菜单',retrievedAt:new Date().toISOString()},recommendations:items.slice(0,3).map((item,index)=>({...item,kcal:[428,465,210][index],protein:[36,31,8][index],portionGrams:[320,350,220][index],score:95-index*4,nutritionConfidence:'medium',reason:'按演示餐次预算和蛋白质优先排序'})),targets:demoTargets({profile:payload.profile,today:payload.today,mealType:payload.mealType}),parsedBy:'demo'};
 }
 function demoRestaurants(payload={}){
   const target=demoTargets({profile:payload.profile,today:payload.today,mealType:payload.mealType}),restaurants=[['轻食实验室','演示路 88 号',420,'香煎鸡胸肉藜麦沙拉',428,36],['谷物食堂','演示路 126 号',680,'番茄牛肉饭（少饭）',465,31],['暖碗餐吧','演示路 208 号',930,'豆腐菌菇荞麦面',392,24]];
@@ -568,12 +651,17 @@ async function demoApi(url,options={}){
   if(path==='/api/agent/memory')return {ok:true,demo:true};
   if(path==='/api/agent/check')return {ok:true,tasks:[]};
   if(path==='/api/agent/review')return {ok:true,result:{adjustment:0,decidedBy:'demo',message:'面试演示模式不修改预算'}};
-  if(path==='/api/agent/logs')return {ok:true,logs:[{kind:'agent_skill',detail:'meal-recommendation:demo-hit',createdAt:now},{kind:'agent_tool',detail:'read_user_state:ok',createdAt:now},{kind:'agent_tool',detail:'get_meal_budget:ok',createdAt:now},{kind:'agent_tool',detail:'compose_home_recipe:ok',createdAt:now},{kind:'agent_chat_done',detail:'预置演示流程完成',createdAt:now}]};
+  if(path==='/api/agent/logs')return {ok:true,logs:[{kind:'agent_skill',detail:'next-meal-decision:demo-ready',createdAt:now},{kind:'agent_tool',detail:'read_user_state:ok',createdAt:now},{kind:'agent_tool',detail:'get_meal_budget:ok',createdAt:now},{kind:'agent_chat_done',detail:'预置演示流程完成',createdAt:now}]};
   if(path==='/api/recipes/diy')return {ok:true,result:demoRecipe(payload)};
   if(path==='/api/plans/daily-meals')return {ok:true,result:demoDailyPlan(payload)};
+  if(path==='/api/plans/weekly')return {ok:true,result:demoNaturalWeek(payload),trace:['demo_natural_week']};
+  if(path==='/api/menus/parse')return {ok:true,result:demoMenuParse(payload),trace:['demo_full_menu_parse']};
   if(path==='/api/agent/chat')return {ok:true,result:demoAgentReply(payload)};
   if(path==='/api/meals/analyze')return {ok:true,trace:['demo_vision_response','demo_nutrition_match'],result:{dishName:'鸡胸肉藜麦沙拉（预置演示）',foods:[{name:'鸡胸肉',portionGrams:120,nutrition:demoFood('鸡胸肉')},{name:'番茄',portionGrams:100,nutrition:demoFood('番茄')},{name:'米饭',portionGrams:80,nutrition:demoFood('米饭')}],uncertainties:['图片未实际上传到服务端，结果为预置示例'],followUpQuestion:'演示模式下可继续确认记录，真实图片识别需连接服务端。',suggestedMealType:mealTypeByTime(),recordDate:localDateKey()}};
-  if(path==='/api/nutrition/search'){const name=new URL(String(url),location.origin).searchParams.get('q')||'鸡胸肉',food=demoFood(name);return {ok:true,result:food,trace:['demo_local_nutrition']};}
+  if(path==='/api/nutrition/search'){
+    const name=new URL(String(url),location.origin).searchParams.get('q')||'鸡胸肉';
+    return {ok:true,result:demoFood(name),trace:['demo_local_nutrition']};
+  }
   if(path.startsWith('/api/nutrition/barcode/'))return {ok:true,result:{name:'预置演示轻食餐',brand:'小饭 Demo',per100g:{kcal:128,protein:11.5,fat:4.2,carbs:12.8},basis:'100g',nutritionSource:'demo_data',matchedReference:'预置演示营养数据',servingSize:'220g'}};
   if(path==='/api/nutrition/web-search')return {ok:true,result:{name:payload.query||'预置演示餐食',kcal:320,protein:24,basis:'serving',confidence:'medium',sourceTitle:'预置演示数据（未发起网页检索）',sourceUrl:'',notes:['GitHub Pages 演示模式不访问外部网页或密钥服务']}};
   if(path==='/api/location/geocode')return {ok:true,result:{lat:31.2304,lng:121.4737,formattedAddress:`${new URL(String(url),location.origin).searchParams.get('address')||'演示地点'}（预置坐标）`}};
@@ -583,7 +671,7 @@ async function demoApi(url,options={}){
 }
 async function apiFetch(url,options={}){
   if(DEMO_MODE)return demoApi(url,options);
-  const response=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await response.json().catch(()=>({error:'服务返回了无效数据'}));if(!response.ok)throw Object.assign(new Error(data.error||`请求失败 ${response.status}`),{status:response.status,data});return data;
+  const response=await fetch(url,{...options,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan',...(options.headers||{})}});const data=await response.json().catch(()=>({error:'服务返回了无效数据'}));if(response.status===401)window.XiaofanAccount?.expired();if(!response.ok)throw Object.assign(new Error(data.error||`请求失败 ${response.status}`),{status:response.status,data});return data;
 }
 async function checkServices(){try{const d=await apiFetch('/api/health');serviceStatus=d.services;return d}catch{return null}}
 checkServices();
@@ -595,7 +683,7 @@ $('#lookupNutritionBtn').addEventListener('click',async()=>{
   delete form.dataset.kcalPer100;delete form.dataset.proteinPer100;delete form.dataset.nutritionBasis;
   status.className='lookup-status loading';status.textContent='Agent工具：正在查询本地营养数据库…';addToolEvent('search_local_nutrition',name);
   try{
-    const d=await apiFetch(`/api/nutrition/search?q=${encodeURIComponent(name)}`),n=d.result.per100g,ratio=grams/100;
+    const d=await apiFetch(`/api/nutrition/search?q=${encodeURIComponent(name)}`);const n=d.result.per100g,ratio=grams/100;
     const kcalPer100=n.kcal||0;form.dataset.kcalPer100=kcalPer100;form.dataset.proteinPer100=n.protein||0;form.dataset.nutritionBasis='100g';form.dataset.nutritionSource='local_database';form.dataset.matchedReference=d.result.name;form.elements.calories.value=Math.round(kcalPer100*ratio);form.elements.protein.value=((n.protein||0)*ratio).toFixed(1);
     status.className='lookup-status success';status.innerHTML=`✓ 匹配到「${escapeHtml(d.result.name)}」：${n.kcal} kcal/100g <span class="api-source">来源：${escapeHtml(d.result.source.type)} · 路径：${d.trace.join(' → ')}</span>`;addToolEvent(d.trace.includes('usda_api')?'search_usda':'lookup_local_food',`${d.result.name} · ${nutritionLevelShort(d.result.confidence)}`);
   }catch(e){
@@ -610,7 +698,7 @@ $('#lookupBarcodeBtn').addEventListener('click',async()=>{
 function recalculateBarcodeNutrition(){const form=$('#manualMealForm'),amount=+form.elements.grams.value||0,kcal=Number(form.dataset.kcalPer100),protein=Number(form.dataset.proteinPer100);form.elements.calories.value=form.dataset.kcalPer100===''?'':Math.round(kcal*amount/100);form.elements.protein.value=form.dataset.proteinPer100===''?0:(protein*amount/100).toFixed(1)}
 $('#manualMealForm').elements.grams.addEventListener('input',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
 $('#manualMealForm').elements.unit.addEventListener('change',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
-$('#manualMealForm').elements.name.addEventListener('input',e=>{if(e.isTrusted){const form=$('#manualMealForm');delete form.dataset.kcalPer100;delete form.dataset.proteinPer100;delete form.dataset.nutritionBasis;delete form.dataset.nutritionSource;delete form.dataset.matchedReference;form.elements.barcode.value=''}});
+$('#manualMealForm').elements.name.addEventListener('input',e=>{if(e.isTrusted){const form=$('#manualMealForm');clearMealNutritionState(form);form.elements.barcode.value=''}});
 async function runWebFoodSearch(name,grams,form,status){
   status.className='lookup-status loading';status.textContent='Agent工具：仅检索政府数据库和品牌官方网站…';addToolEvent('search_official_web',name);
   try{const d=await apiFetch('/api/nutrition/web-search',{method:'POST',body:JSON.stringify({query:name})}),r=d.result,ratio=r.basis==='per100g'?grams/100:1;form.dataset.kcalPer100=r.kcal??'';form.dataset.proteinPer100=r.protein??0;form.dataset.nutritionBasis=r.basis==='per100g'?'100g':'serving';form.dataset.nutritionSource='official_web_candidate';form.dataset.matchedReference=r.name||name;if(r.kcal!=null)form.elements.calories.value=Math.round(r.kcal*ratio);if(r.protein!=null)form.elements.protein.value=(r.protein*ratio).toFixed(1);status.className=r.confidence==='low'?'lookup-status warning':'lookup-status success';const candidateUrl=/^https?:\/\//.test(String(r.sourceUrl||''))?String(r.sourceUrl):'',candidateSource=candidateUrl?`<a href="${escapeHtml(candidateUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.sourceTitle||'查看来源')}</a>`:escapeHtml(r.sourceTitle||'未验证来源'),rawNotes=(Array.isArray(r.notes)?r.notes:[]).filter(Boolean).join('；').trim(),candidateNotes=rawNotes.slice(0,500),noteSuffix=rawNotes.length>500?'…':'';status.innerHTML=`网页候选：${escapeHtml(r.name||name)} · ${r.kcal??'未知'} kcal/${r.basis==='per100g'?'100g':'份'}<span class="api-source">${candidateSource} · 已进入候选库，使用前请确认</span>${r.kcal==null?'<span class="api-source">未找到可靠官方数据：请手动填写热量与蛋白质，或换更具体的菜品名（如“赛百味金枪鱼三明治 6英寸”）再查询。</span>':''}${candidateNotes?`<span class="api-source">候选说明：${escapeHtml(candidateNotes)}${noteSuffix}</span>`:''}`}catch(e){status.className='lookup-status error';status.textContent=`网页检索失败：${e.message}`}
@@ -640,7 +728,7 @@ startRestaurantSearch = async function(cuisine='',mealType=suggestedMealType(),d
     $('#loadingText').textContent='检索并核验公开菜单…';addToolEvent('search_public_menus','最多核验5家附近门店');
     const recommendationData=await apiFetch('/api/restaurants/recommendations',{method:'POST',body:JSON.stringify({restaurants:d.results,requestedCount,cuisine,mealType,dayOffset,profile:userData?.profile||{},today:{calories:state.calories,protein:state.protein,meals:todayMeals()}})}),results=recommendationData.results,targets=recommendationData.targets,amapDishCount=results.filter(x=>x.recommendation.mode==='amap_tag').length,webMenuCount=results.filter(x=>x.recommendation.mode==='verified_menu').length;addToolEvent('verify_menu_sources',`${amapDishCount}家有高德特色菜 · ${webMenuCount}家找到可靠公开菜单`);addToolEvent('rank_by_meal_gap',`${mealDayLabel()}${mealType}请求${requestedCount}家 · 实际符合${results.length}家`);$('#restaurantLoading').style.display='none';
     if(!results.length){$('#restaurantResults').innerHTML=`<div class="lookup-status warning">你要求推荐 ${requestedCount} 家，但当前范围内实际找到 0 家符合条件且在${mealDayLabel()}${escapeHtml(mealType)}时段营业的门店。请减少筛选条件、调整餐次或扩大搜索范围。<span class="api-source">营业时间来源：高德POI business；节假日和临时调整请以门店为准。</span></div>`;return}
-    const dayLabel=dayOffset===1?'明天':'今天',countNotice=results.length<requestedCount?`<div class="lookup-status warning">你要求推荐 ${requestedCount} 家，当前实际找到 ${results.length} 家符合距离、营业时间和筛选条件的门店。<span class="api-source">未使用不营业或不符合条件的门店凑数；可以扩大范围或减少筛选条件。</span></div>`:'',budgetNotice=targets?.budgetStatus==='exhausted'?`${dayLabel}理论热量余额已经用完。以下仍可选择，但食用后会超过${dayLabel}理论目标；在没有其他要求时已优先低卡候选。`:targets?.budgetStatus==='low'?`${dayLabel}${targets.mealType}可用热量较少，已优先推荐低卡候选。`:`${dayLabel}${targets?.mealType||'本餐'}动态预算约 ${targets?.mealKcal||0} kcal。`,targetBanner=targets?`<div class="lookup-status ${targets.budgetStatus==='normal'?'success':'warning'}">${cuisine?`本餐偏好：${escapeHtml(cuisine)} · `:''}${escapeHtml(budgetNotice)}<span class="api-source">推荐阶段优先解决去哪吃、点什么；用餐后再通过拍照或手动输入确认实际摄入。${dayLabel}剩余 ${targets.remainingKcal} kcal，为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal</span></div>`:'';$('#restaurantResults').innerHTML=countNotice+targetBanner+results.map((r,i)=>{const rec=r.recommendation,p=rec.personalization||{},sources=(rec.sources||[]).map(s=>`<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.title)}</a>`).join(' · '),sourceDetail=rec.mode==='amap_tag'?'菜名来源：高德POI business.tag':sources?`菜单来源：${sources}`:'实际供应以门店为准',isCombination=rec.mode==='type_fallback',dishText=p.mealDisplay||rec.mealStructure||((isCombination?(rec.dishes||[]).join(' ＋ '):`任选1项：${(rec.dishes||[]).join(' / ')}`)),kcal=p.kcal!=null?p.kcal:null,protein=p.protein!=null?p.protein:null,nutrition=kcal!=null?`<div class="dish">推荐阶段估算 ${kcal} kcal · 蛋白质 ${protein}g</div>`:'<div class="dish">可以推荐 · 实际能量待用餐后拍照或手动记录</div>',confidenceText=kcal!=null?nutritionLevelNote(p.confidence||'low'):'暂不提供未经核验的热量',hoursText=escapeHtml(p.hours?.label||'营业时间待确认');return `<div class="restaurant-card"><span class="restaurant-rank">${String(i+1).padStart(2,'0')}</span><div><h3>${escapeHtml(r.name)}</h3><p>${Number.isFinite(r.distance)?`${r.distance}m · `:''}${escapeHtml(r.address||'地址未提供')}</p><div class="dish">${escapeHtml(dishText)}</div>${nutrition}<p class="why">✦ ${escapeHtml(p.reason||rec.reason)}</p><span class="confidence">${hoursText} · 个性化匹配 ${p.score||0} · ${confidenceText} · ${escapeHtml(rec.label)} · ${sourceDetail}</span><div class="restaurant-record-actions"><button data-photo-after="${i}">用餐后拍照记录</button><button data-manual-after="${i}">手动记录</button></div></div><button data-map-restaurant="${i}">查看位置</button></div>`}).join('');
+    const dayLabel=dayOffset===1?'明天':'今天',countNotice=results.length<requestedCount?`<div class="lookup-status warning">你要求推荐 ${requestedCount} 家，当前实际找到 ${results.length} 家符合距离、营业时间和筛选条件的门店。<span class="api-source">未使用不营业或不符合条件的门店凑数；可以扩大范围或减少筛选条件。</span></div>`:'',budgetNotice=targets?.budgetStatus==='exhausted'?`${dayLabel}理论参考已超出；以下按正常${targets.mealType||'餐次'}参考推荐，优先营养密度较高且不过量，不以跳餐或最低热量作为补偿。`:targets?.budgetStatus==='low'?`${dayLabel}${targets.mealType}可用热量较少，已优先推荐低卡候选。`:`${dayLabel}${targets?.mealType||'本餐'}动态预算约 ${targets?.mealKcal||0} kcal。`,targetDetail=targets?.budgetStatus==='exhausted'?`${dayLabel}剩余理论额度为 0 kcal，但本餐不会因此归零；今天的偏差不会转成明日热量债务。`:`${dayLabel}剩余 ${targets.remainingKcal} kcal，为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal`,targetBanner=targets?`<div class="lookup-status ${targets.budgetStatus==='normal'?'success':'warning'}">${cuisine?`本餐偏好：${escapeHtml(cuisine)} · `:''}${escapeHtml(budgetNotice)}<span class="api-source">推荐阶段优先解决去哪吃、点什么；用餐后再通过拍照或手动输入确认实际摄入。${targetDetail}</span></div>`:'';$('#restaurantResults').innerHTML=countNotice+targetBanner+results.map((r,i)=>{const rec=r.recommendation,p=rec.personalization||{},sources=(rec.sources||[]).map(s=>`<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.title)}</a>`).join(' · '),sourceDetail=rec.mode==='amap_tag'?'菜名来源：高德POI business.tag':sources?`菜单来源：${sources}`:'实际供应以门店为准',isCombination=rec.mode==='type_fallback',dishText=p.mealDisplay||rec.mealStructure||((isCombination?(rec.dishes||[]).join(' ＋ '):`任选1项：${(rec.dishes||[]).join(' / ')}`)),kcal=p.kcal!=null?p.kcal:null,protein=p.protein!=null?p.protein:null,nutrition=kcal!=null?`<div class="dish">推荐阶段估算 ${kcal} kcal · 蛋白质 ${protein==null?'未知':`${protein}g`}</div>`:'<div class="dish">可以推荐 · 实际能量待用餐后拍照或手动记录</div>',confidenceText=kcal!=null?nutritionLevelNote(p.confidence||'low'):'暂不提供未经核验的热量',hoursText=escapeHtml(p.hours?.label||'营业时间待确认');return `<div class="restaurant-card"><span class="restaurant-rank">${String(i+1).padStart(2,'0')}</span><div><h3>${escapeHtml(r.name)}</h3><p>${Number.isFinite(r.distance)?`${r.distance}m · `:''}${escapeHtml(r.address||'地址未提供')}</p><div class="dish">${escapeHtml(dishText)}</div>${nutrition}<p class="why">✦ ${escapeHtml(p.reason||rec.reason)}</p><span class="confidence">${hoursText} · 个性化匹配 ${p.score||0} · ${confidenceText} · ${escapeHtml(rec.label)} · ${sourceDetail}</span><div class="restaurant-record-actions"><button data-photo-after="${i}">用餐后拍照记录</button><button data-manual-after="${i}">手动记录</button></div></div><button data-map-restaurant="${i}">查看位置</button></div>`}).join('');
     $$('[data-map-restaurant]').forEach((b,i)=>b.onclick=()=>{const r=results[i],url=r.location?`https://uri.amap.com/marker?position=${encodeURIComponent(r.location)}&name=${encodeURIComponent(r.name)}&src=XiaoFan&coordinate=gaode&callnative=0`:`https://www.amap.com/search?query=${encodeURIComponent(`${r.name} ${r.address||''}`)}`;window.open(url,'_blank','noopener,noreferrer')});
     $$('[data-photo-after]').forEach(b=>b.onclick=()=>{switchView('agent');showToast('请在Agent对话框上传图片分析这顿餐食');$('#uploadInChat')?.focus()});
     $$('[data-manual-after]').forEach(b=>b.onclick=()=>openMealRecord(localDateKey(),mealType));

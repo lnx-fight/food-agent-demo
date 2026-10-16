@@ -40,8 +40,8 @@ const idSet=new Set();
 for(const row of CASES)idSet.add(row.id);
 if(idSet.size!==CASES.length)throw new Error('夹具存在重复 id');
 
-function percent(value,count){
-  return count?`${(Number(value)*100).toFixed(1)}%`:'-';
+function percent(numerator,denominator){
+  return denominator?`${(Number(numerator)/Number(denominator)*100).toFixed(1)}%`:'-';
 }
 const ACTION_SCENARIOS={open_diy:'diy',open_restaurants:'restaurants',open_meal_choice:'unknown'};
 
@@ -81,10 +81,10 @@ async function evaluateCase(testCase,index){
     row.actual=String(out.action?.type||'none');
     row.correct=row.actual===testCase.expectedAction;
     row.routerCorrect=row.routerAction===testCase.expectedAction;
-    row.scenarioCorrect=row.mealScenario===row.expectedScenario;
     row.guarded=!!routing.correctionAttempted;
     row.mealScenario=String(routing.mealScenario||'');
     row.scenarioSource=String(routing.scenarioSource||'');
+    row.scenarioCorrect=row.mealScenario===row.expectedScenario;
   }catch(error){
     row.error=error.message;
     row.countable=false;
@@ -134,14 +134,14 @@ for(const category of categories){
   const rows=countable.filter(row=>row.category===category);
   if(!rows.length)continue;
   const ok=rows.filter(row=>row.correct).length;
-  console.log(`  ${category.padEnd(18)} ${ok}/${rows.length}  ${percent(ok/rows.length,rows.length)}`);
+  console.log(`  ${category.padEnd(18)} ${ok}/${rows.length}  ${percent(ok,rows.length)}`);
 }
 
 const adversarial=countable.filter(row=>row.adversarial);
 if(adversarial.length){
   const ok=adversarial.filter(row=>row.correct).length;
   console.log('\n===== 对抗样本子集 =====');
-  console.log(`  ${ok}/${adversarial.length}  ${percent(ok/adversarial.length,adversarial.length)}`);
+  console.log(`  ${ok}/${adversarial.length}  ${percent(ok,adversarial.length)}`);
 }
 
 const wrong=countable.filter(row=>!row.correct);

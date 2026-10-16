@@ -1,8 +1,8 @@
 # 下一餐推荐 Tool 使用指南
 
-> 本文件定义 `meal-recommendation` Skill 内部的 Tool 选择、依赖关系和调用编排。
+> 本文件定义 `next-meal-decision` Skill 的 Tool 选择、依赖关系和调用编排。
 >
-> 本文件只在当前任务已经进入 `meal-recommendation` Skill 后使用。
+> 本文件只在当前任务已经进入 `next-meal-decision` 后使用。
 >
 > 下一餐推荐中的场景判断与分流由 `SKILL.md` 负责。
 >
@@ -109,8 +109,11 @@
 * 修改待确认记录；
 * 体重记录；
 * 整日饮食计划；
+* 由饮食记录自动触发的今日或未来计划刷新。
 
 不在本文件定义。
+
+计划刷新由确定性状态机负责，本 Skill 不调用计划补丁 Tool。用户在说明现实变化后询问一顿具体餐食时，读取刷新后的状态并继续下一餐决策。
 
 ---
 
@@ -826,4 +829,4 @@ search_nearby_restaurants
 
 负责：
 
-> 在 `meal-recommendation` Skill 已经确定具体任务后，多个 Tool 应该如何选择、依赖和衔接。
+> 在 `next-meal-decision` 已经确定具体任务后，多个 Tool 应该如何选择、依赖和衔接。

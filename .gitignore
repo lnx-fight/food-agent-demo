@@ -14,3 +14,12 @@ coverage/
 *.log
 .DS_Store
 
+
+# Cloudflare build and local runtime
+dist/
+.cloudflare/
+.dev.vars
+data/downloads/
+data/usda/nutrition.csv
+__pycache__/
+*.pyc

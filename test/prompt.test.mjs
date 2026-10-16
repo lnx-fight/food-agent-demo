@@ -5,8 +5,8 @@ import {PROMPT_VERSION,PROMPTS_VERSION,SYSTEM_BASE,buildAgentContext,sanitizePla
 const baseCtx={profile:{},weights:[],pendingMeal:null,recentConfirmed:[],targets:{},today:{},mealType:'午餐'};
 
 test('提示词版本号已定义',()=>{
-  assert.equal(PROMPT_VERSION,'v9');
-  assert.equal(PROMPTS_VERSION,'v3');
+  assert.equal(PROMPT_VERSION,'v13');
+  assert.equal(PROMPTS_VERSION,'v7');
 });
 
 test('规划器步骤过滤未知工具名并限制步数',()=>{
@@ -31,6 +31,8 @@ test('提示词包含写库唯一路径约束',()=>{
   assert.ok(!SYSTEM_BASE.includes('propose_weight_record'));
   assert.ok(SYSTEM_BASE.includes('不得声称已写入'));
   assert.ok(SYSTEM_BASE.includes('revise_pending_meal'));
+  assert.ok(!SYSTEM_BASE.includes('propose_plan_patch'));
+  assert.ok(SYSTEM_BASE.includes('不继承当天“热量债务”'));
 });
 
 test('文字记餐提案失败时必须返回未记录状态和手动记录入口',()=>{
