@@ -12,7 +12,6 @@ async function include(dir){
     else if(entry.name.endsWith('.md'))files[`/app/${path}`]=await readFile(resolve(root,path),'utf8');
   }
 }
-files['/app/data/foods.json']=await readFile(resolve(root,'data/foods.json'),'utf8');
 await include('skills');
 await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
 await Promise.all(PUBLIC_FILES.map(name=>copyFile(resolve(root,name),resolve(out,name))));

@@ -43,7 +43,7 @@ function nutritionLevelShort(level='low'){
   return ({high:'来源可靠',medium:'近似匹配',low:'待核验估算'})[level]||'待核验估算';
 }
 function nutritionLevelNote(level='low'){
-  return ({high:'本地库匹配到该菜的营养数据；份量仍按常见外食估算，误差较小',medium:'热量按本地近似菜和常见外食份量估算，用油、酱汁和实际食用量可能造成偏差',low:'本地库和公开菜单未查到这道菜的可靠营养数据，按同类菜估算，实际以实物为准'})[level]||'热量为估算，实际以实物为准';
+  return ({high:'USDA 匹配到对应食品的营养数据；份量仍按常见外食估算，误差较小',medium:'热量按 USDA 对应食品和估计份量计算，用油、酱汁和实际食用量可能造成偏差',low:'USDA 未找到对应食品的可靠数据，请补充信息，暂不自动估算'})[level]||'热量为估算，实际以实物为准';
 }
 function normalizeDisplayedDecimals(root=document.body){if(!root)return;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);for(const node of nodes){if(['SCRIPT','STYLE'].includes(node.parentElement?.tagName))continue;const next=node.nodeValue.replace(/-?\d+\.\d{3,}/g,value=>formatNumber(value));if(next!==node.nodeValue)node.nodeValue=next}}
 new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>normalizeDisplayedDecimals(node.nodeType===Node.TEXT_NODE?node.parentElement:node)))).observe(document.body,{childList:true,subtree:true});document.addEventListener('change',event=>{if(event.target.matches('input[type="number"]')&&event.target.value!==''){const value=Number(event.target.value);if(Number.isFinite(value))event.target.value=formatNumber(value)}});
@@ -293,7 +293,7 @@ function prepareMealRecordForm(date=''){
 function openMealRecord(date=localDateKey(),type=mealTypeByTime()){
   setActiveMealType(type);const form=$('#manualMealForm');form.reset();delete form.dataset.editingId;clearMealNutritionState(form);form.elements.type.value=type;prepareMealRecordForm(date);form.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';openModal('manualMealModal');
 }
-function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1'}
+function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference','nutritionSourceUrl','referenceLabel','lookupToken'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1'}
 function daysBetween(a,b){ return Math.max(1,Math.ceil((new Date(b)-new Date(a))/86400000)); }
 function calculateProfile(profile){
   const h=profile.height/100;
@@ -458,6 +458,7 @@ $('#manualMealForm').addEventListener('submit',e=>{
     const changed=['name','calories','protein','amount','unit'].some(key=>existing[key]!==log[key]);
     if(changed){for(const key of ['nutritionSource','nutritionSourceUrl','referenceId','referenceLabel'])delete existing[key];existing.proteinKnown=e.target.elements.protein.value!==''}else log.source=existing.source;
   }
+  if(e.target.dataset.nutritionSource==='USDA')Object.assign(log,{nutritionSource:'USDA',nutritionSourceUrl:e.target.dataset.nutritionSourceUrl,referenceId:e.target.dataset.matchedReference,referenceLabel:e.target.dataset.referenceLabel,proteinKnown:e.target.dataset.proteinPer100!==''});
   if(existing)Object.assign(existing,log);else userData.mealLogs.push(log);state.mealHistoryDate=date;saveUser();rememberAgent('meal_confirmed',{name:log.name,calories:log.calories,protein:log.protein,mealType:log.type,source:log.source});e.target.reset();delete e.target.dataset.editingId;clearMealNutritionState(e.target);e.target.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';state.activeMealType='';state.activeMealDayOffset=0;closeModals();hydrateApp();addTrace('✓',`${editingId?'修改':isBackfill?'补登':'记录'}${dateDisplay(date)}饮食`,'save_meal_log',`${log.name} · ${log.amount||'?'}${log.unit==='serving'?'份':log.unit} · ${log.calories} kcal`);showToast(`${dateDisplay(date)}饮食已${editingId?'修改':'保存'}${isBackfill&&!editingId?'（补登）':''}`);
 });
 
@@ -597,26 +598,14 @@ adjustGoalForm.elements.targetWeight.addEventListener('input',updateAdjustGoalPr
 adjustGoalForm.addEventListener('submit',e=>{e.preventDefault();if(!userData||!e.target.reportValidity())return;const old={targetWeight:userData.profile.targetWeight,targetDate:userData.profile.targetDate},targetWeight=+e.target.elements.targetWeight.value,targetDate=e.target.elements.targetDate.value;userData.goalHistory=userData.goalHistory||[];userData.goalHistory.push({...old,changedAt:new Date().toISOString()});userData.profile.targetWeight=targetWeight;userData.profile.targetDate=targetDate;saveUser();closeModals();hydrateApp();const days=daysBetween(localDateKey(),targetDate);addTrace('↻','目标计划已调整','replan_weight_goal',`目标 ${targetWeight.toFixed(1)} kg · 新周期 ${days} 天`);showToast(`目标已更新，Agent已按${days}天重新规划`)});
 
 // --- Real backend integrations ---
-let serviceStatus={qwen:false,usda:false,amap:false,openFoodFacts:true};
+let serviceStatus={qwen:false,usda:false,amap:false,openFoodFacts:false};
 const portionForm=$('#manualMealForm'),portionInput=portionForm.elements.grams,portionLabel=portionInput.closest('label'),portionControl=document.createElement('div'),portionUnit=document.createElement('select');
 portionUnit.name='unit';portionUnit.setAttribute('aria-label','份量单位');portionUnit.innerHTML='<option value="g">g</option><option value="ml">ml</option><option value="serving">份</option>';portionControl.className='portion-control';portionControl.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:end';portionInput.replaceWith(portionControl);portionControl.append(portionInput,portionUnit);portionLabel.firstChild.textContent='大约份量';
 $('#manualMealForm').elements.protein.step='0.1';
 function demoPayload(options={}){try{return options.body?JSON.parse(options.body):{}}catch{return {}}}
-function demoFood(name='鸡胸肉'){
-  const key=String(name).trim(),catalog={
-    '鸡胸肉':{kcal:133,protein:24.6,fat:2.8,carbs:0},'鸡蛋':{kcal:144,protein:13.3,fat:8.8,carbs:2.8},'番茄':{kcal:18,protein:.9,fat:.2,carbs:3.9},'米饭':{kcal:116,protein:2.6,fat:.3,carbs:25.9},'西兰花':{kcal:36,protein:4.1,fat:.6,carbs:4.3},'燕麦':{kcal:367,protein:15,fat:6.7,carbs:61.6},'三文鱼':{kcal:208,protein:20.4,fat:13.4,carbs:0},'豆腐':{kcal:81,protein:8.1,fat:4.2,carbs:2.0}
-  },hit=catalog[key]||catalog['鸡胸肉'];
-  return {name:key||'鸡胸肉',category:'演示食材',per100g:hit,source:{type:'预置演示营养数据',url:null},confidence:'medium'};
-}
 function demoTargets({profile={},today={},mealType='' }={}){
   const type=normalizeClientMealType(mealType)||mealTypeByTime(),dailyTarget=Math.max(1200,Math.round(Number(state.theoreticalTarget)||Number(state.energyTarget)||1500)),consumed=Math.max(0,Math.round(Number(today.calories)||0)),remaining=Math.max(0,dailyTarget-consumed),index=['早餐','午餐','晚餐'].indexOf(type),futureMeals=['早餐','午餐','晚餐'].slice(Math.max(0,index+1)),exhausted=remaining<=0,mealKcal=exhausted?Math.round(dailyTarget*({早餐:.25,午餐:.4,晚餐:.35}[type]||.35)):Math.max(280,Math.round(remaining/(futureMeals.length+1)));
   return {mealType:type,dailyTarget,consumedKcal:consumed,remainingKcal:remaining,reservedKcal:exhausted?0:Math.round(remaining*.45),mealKcal,futureMeals,budgetStatus:exhausted?'exhausted':remaining<250?'low':'normal',recommendationMode:exhausted?'regular_meal_no_compensation':'remaining_budget',guidance:exhausted?'今日理论参考已超出；本餐按正常餐次提供参考，不通过跳餐或次日扣减补偿。':''};
-}
-function demoRecipe(payload={}){
-  const names=(Array.isArray(payload.ingredients)?payload.ingredients:[]).map(x=>String(x).trim()).filter(Boolean).slice(0,4),selected=(names.length?names:['鸡胸肉','番茄','鸡蛋','米饭']).map((name,index)=>{const food=demoFood(name),grams=[120,140,55,100][index]||80;return {name:food.name,grams,kcal:Math.round(food.per100g.kcal*grams/100),protein:+(food.per100g.protein*grams/100).toFixed(1),fat:+(food.per100g.fat*grams/100).toFixed(1),carbs:+(food.per100g.carbs*grams/100).toFixed(1)}});
-  const nutrition=selected.reduce((sum,item)=>({kcal:sum.kcal+item.kcal,protein:sum.protein+item.protein,fat:sum.fat+item.fat,carbs:sum.carbs+item.carbs}),{kcal:0,protein:0,fat:0,carbs:0});
-  nutrition.protein=+nutrition.protein.toFixed(1);nutrition.fat=+nutrition.fat.toFixed(1);nutrition.carbs=+nutrition.carbs.toFixed(1);
-  return {recipe:{name:`${selected[0].name}彩蔬能量碗`,minutes:20,ingredients:selected,steps:['将主食材切成适口大小，少油煎熟或焯熟。','加入蔬菜与主食材翻拌，按个人口味调味。','装盘后按实际食用量确认记录。']},nutrition,matched:selected.map(x=>x.name),targets:demoTargets({profile:payload.profile,today:payload.today,mealType:payload.mealType}),generatedBy:'demo'};
 }
 function demoDailyPlan(payload={}){
   const targets=demoTargets({profile:payload.profile,today:payload.today,mealType:'午餐'}),planned=[
@@ -652,18 +641,12 @@ async function demoApi(url,options={}){
   if(path==='/api/agent/check')return {ok:true,tasks:[]};
   if(path==='/api/agent/review')return {ok:true,result:{adjustment:0,decidedBy:'demo',message:'面试演示模式不修改预算'}};
   if(path==='/api/agent/logs')return {ok:true,logs:[{kind:'agent_skill',detail:'next-meal-decision:demo-ready',createdAt:now},{kind:'agent_tool',detail:'read_user_state:ok',createdAt:now},{kind:'agent_tool',detail:'get_meal_budget:ok',createdAt:now},{kind:'agent_chat_done',detail:'预置演示流程完成',createdAt:now}]};
-  if(path==='/api/recipes/diy')return {ok:true,result:demoRecipe(payload)};
+  if(path==='/api/recipes/diy')throw new Error('请登录后使用 USDA 食材数据生成食谱。');
   if(path==='/api/plans/daily-meals')return {ok:true,result:demoDailyPlan(payload)};
   if(path==='/api/plans/weekly')return {ok:true,result:demoNaturalWeek(payload),trace:['demo_natural_week']};
   if(path==='/api/menus/parse')return {ok:true,result:demoMenuParse(payload),trace:['demo_full_menu_parse']};
   if(path==='/api/agent/chat')return {ok:true,result:demoAgentReply(payload)};
-  if(path==='/api/meals/analyze')return {ok:true,trace:['demo_vision_response','demo_nutrition_match'],result:{dishName:'鸡胸肉藜麦沙拉（预置演示）',foods:[{name:'鸡胸肉',portionGrams:120,nutrition:demoFood('鸡胸肉')},{name:'番茄',portionGrams:100,nutrition:demoFood('番茄')},{name:'米饭',portionGrams:80,nutrition:demoFood('米饭')}],uncertainties:['图片未实际上传到服务端，结果为预置示例'],followUpQuestion:'演示模式下可继续确认记录，真实图片识别需连接服务端。',suggestedMealType:mealTypeByTime(),recordDate:localDateKey()}};
-  if(path==='/api/nutrition/search'){
-    const name=new URL(String(url),location.origin).searchParams.get('q')||'鸡胸肉';
-    return {ok:true,result:demoFood(name),trace:['demo_local_nutrition']};
-  }
-  if(path.startsWith('/api/nutrition/barcode/'))return {ok:true,result:{name:'预置演示轻食餐',brand:'小饭 Demo',per100g:{kcal:128,protein:11.5,fat:4.2,carbs:12.8},basis:'100g',nutritionSource:'demo_data',matchedReference:'预置演示营养数据',servingSize:'220g'}};
-  if(path==='/api/nutrition/web-search')return {ok:true,result:{name:payload.query||'预置演示餐食',kcal:320,protein:24,basis:'serving',confidence:'medium',sourceTitle:'预置演示数据（未发起网页检索）',sourceUrl:'',notes:['GitHub Pages 演示模式不访问外部网页或密钥服务']}};
+  if(path==='/api/meals/analyze'||path.startsWith('/api/nutrition/'))throw new Error('请登录后查询真实 USDA 数据；演示模式不提供预置营养值。');
   if(path==='/api/location/geocode')return {ok:true,result:{lat:31.2304,lng:121.4737,formattedAddress:`${new URL(String(url),location.origin).searchParams.get('address')||'演示地点'}（预置坐标）`}};
   if(path==='/api/restaurants/nearby')return {ok:true,results:[{name:'轻食实验室',address:'演示路 88 号',distance:420,location:'121.4737,31.2304'},{name:'谷物食堂',address:'演示路 126 号',distance:680,location:'121.4737,31.2304'},{name:'暖碗餐吧',address:'演示路 208 号',distance:930,location:'121.4737,31.2304'}]};
   if(path==='/api/restaurants/recommendations')return {ok:true,...demoRestaurants(payload)};
@@ -676,33 +659,30 @@ async function apiFetch(url,options={}){
 async function checkServices(){try{const d=await apiFetch('/api/health');serviceStatus=d.services;return d}catch{return null}}
 checkServices();
 
-$('#lookupNutritionBtn').addEventListener('click',async()=>{
-  const form=$('#manualMealForm'),name=form.elements.name.value.trim(),grams=+form.elements.grams.value||100,status=$('#nutritionLookupStatus');if(!name){status.className='lookup-status error';status.textContent='请先填写食物名称';return}
-  if(form.dataset.nutritionBasis){recalculateBarcodeNutrition();const hasEnergy=form.dataset.kcalPer100!=='',fallback=form.dataset.nutritionSource==='local_reference_fallback',local=form.dataset.nutritionSource==='local_database';status.className=hasEnergy?(fallback?'lookup-status warning':'lookup-status success'):'lookup-status warning';status.innerHTML=hasEnergy?`✓ 已按当前份量重新计算「${escapeHtml(name)}」的热量和蛋白质<span class="api-source">${fallback?`包装营养缺失，使用本地「${escapeHtml(form.dataset.matchedReference||'通用食品')}」参考值估算`:local?`来源：本地营养库 · 当前单位 ${escapeHtml(form.elements.unit.value)}`:`来源：Open Food Facts · ${form.dataset.nutritionBasis==='100ml'?'液体按毫升计算':'按克计算'}`}</span>`:`「${escapeHtml(name)}」的条码记录缺少营养信息，请对照包装标签手动填写。`;return}
-  if(form.elements.barcode.value.trim()){$('#lookupBarcodeBtn').click();return}
-  delete form.dataset.kcalPer100;delete form.dataset.proteinPer100;delete form.dataset.nutritionBasis;
-  status.className='lookup-status loading';status.textContent='Agent工具：正在查询本地营养数据库…';addToolEvent('search_local_nutrition',name);
+async function lookupUsdaNutrition(query){
+  const form=$('#manualMealForm'),status=$('#nutritionLookupStatus');
+  clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';
+  status.className='lookup-status loading';status.textContent='正在检索 USDA 权威营养数据…';addToolEvent('search_usda_dataset',query);
+  const lookupToken=String(Date.now())+Math.random();form.dataset.lookupToken=lookupToken;
   try{
-    const d=await apiFetch(`/api/nutrition/search?q=${encodeURIComponent(name)}`);const n=d.result.per100g,ratio=grams/100;
-    const kcalPer100=n.kcal||0;form.dataset.kcalPer100=kcalPer100;form.dataset.proteinPer100=n.protein||0;form.dataset.nutritionBasis='100g';form.dataset.nutritionSource='local_database';form.dataset.matchedReference=d.result.name;form.elements.calories.value=Math.round(kcalPer100*ratio);form.elements.protein.value=((n.protein||0)*ratio).toFixed(1);
-    status.className='lookup-status success';status.innerHTML=`✓ 匹配到「${escapeHtml(d.result.name)}」：${n.kcal} kcal/100g <span class="api-source">来源：${escapeHtml(d.result.source.type)} · 路径：${d.trace.join(' → ')}</span>`;addToolEvent(d.trace.includes('usda_api')?'search_usda':'lookup_local_food',`${d.result.name} · ${nutritionLevelShort(d.result.confidence)}`);
-  }catch(e){
-    if(e.data?.canUseWeb){await runWebFoodSearch(name,grams,form,status)}else{status.className='lookup-status warning';status.innerHTML=`未在当前数据源中找到「${escapeHtml(name)}」。请手动填写营养信息，或配置USDA服务。`}
+    const data=await apiFetch(`/api/nutrition/search?q=${encodeURIComponent(query)}`);
+    if(form.dataset.lookupToken!==lookupToken)return;
+    const food=data.result,n=food.per100g;
+    form.elements.name.value=food.name;form.elements.unit.value='g';
+    form.dataset.kcalPer100=n.kcal;form.dataset.proteinPer100=n.protein??'';form.dataset.nutritionBasis='100g';form.dataset.nutritionSource='USDA';form.dataset.matchedReference=food.id;form.dataset.nutritionSourceUrl=food.source.url;form.dataset.referenceLabel=food.name;
+    recalculateBarcodeNutrition();
+    status.className='lookup-status success';status.innerHTML=`✓ ${escapeHtml(food.name)}：${n.kcal} kcal/100g<span class="api-source">原名：${escapeHtml(food.originalName||food.name)}${food.matchNote?`<br>${escapeHtml(food.matchNote)}`:''}<br><a href="${escapeHtml(food.source.url)}" target="_blank" rel="noopener noreferrer">USDA · ${escapeHtml(food.id)}</a> · 按每100g可食部计算，请核对实际份量和配方</span>`;
+  }catch(error){
+    if(form.dataset.lookupToken!==lookupToken)return;
+    status.className='lookup-status warning';status.textContent=error.data?.question||error.message||'USDA 未找到合适记录，请补充具体名称或手动填写包装营养信息。';
   }
-});
-$('#lookupBarcodeBtn').addEventListener('click',async()=>{
-  const form=$('#manualMealForm'),code=form.elements.barcode.value.trim(),grams=+form.elements.grams.value||100,status=$('#nutritionLookupStatus');if(!code){status.className='lookup-status error';status.textContent='请填写包装上的商品条码';return}
-  status.className='lookup-status loading';status.textContent='正在查询 Open Food Facts…';addToolEvent('lookup_product_barcode',code);
-  try{const d=await apiFetch(`/api/nutrition/barcode/${encodeURIComponent(code)}`),r=d.result,n=r.per100g,fallback=r.nutritionSource==='local_reference_fallback',liquid=r.basis==='100ml'||/奶|饮料|果汁|咖啡|茶|水|酒/.test(r.name);form.elements.name.value=r.name;form.dataset.kcalPer100=n.kcal??'';form.dataset.proteinPer100=n.protein??'';form.dataset.nutritionBasis=r.basis||'100g';form.dataset.nutritionSource=r.nutritionSource||'open_food_facts';form.dataset.matchedReference=r.matchedReference||'';form.elements.unit.value=liquid?'ml':'g';recalculateBarcodeNutrition();status.className=n.kcal==null||fallback?'lookup-status warning':'lookup-status success';status.innerHTML=`✓ ${escapeHtml(r.brand?`${r.brand} · ${r.name}`:r.name)}${n.kcal==null?' · 营养数据不完整':''}<span class="api-source">${fallback?`Open Food Facts缺少营养值，已用本地「${escapeHtml(r.matchedReference)}」参考值估算`:`来源：Open Food Facts · 按${r.basis==='100ml'?'100ml':'100g'}计算${r.servingSize?` · 包装份量 ${escapeHtml(r.servingSize)}`:''} · 请与包装标签核对`}</span>`}catch(e){status.className='lookup-status error';status.textContent=`条码查询失败：${e.message}`}
-});
-function recalculateBarcodeNutrition(){const form=$('#manualMealForm'),amount=+form.elements.grams.value||0,kcal=Number(form.dataset.kcalPer100),protein=Number(form.dataset.proteinPer100);form.elements.calories.value=form.dataset.kcalPer100===''?'':Math.round(kcal*amount/100);form.elements.protein.value=form.dataset.proteinPer100===''?0:(protein*amount/100).toFixed(1)}
-$('#manualMealForm').elements.grams.addEventListener('input',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
-$('#manualMealForm').elements.unit.addEventListener('change',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
-$('#manualMealForm').elements.name.addEventListener('input',e=>{if(e.isTrusted){const form=$('#manualMealForm');clearMealNutritionState(form);form.elements.barcode.value=''}});
-async function runWebFoodSearch(name,grams,form,status){
-  status.className='lookup-status loading';status.textContent='Agent工具：仅检索政府数据库和品牌官方网站…';addToolEvent('search_official_web',name);
-  try{const d=await apiFetch('/api/nutrition/web-search',{method:'POST',body:JSON.stringify({query:name})}),r=d.result,ratio=r.basis==='per100g'?grams/100:1;form.dataset.kcalPer100=r.kcal??'';form.dataset.proteinPer100=r.protein??0;form.dataset.nutritionBasis=r.basis==='per100g'?'100g':'serving';form.dataset.nutritionSource='official_web_candidate';form.dataset.matchedReference=r.name||name;if(r.kcal!=null)form.elements.calories.value=Math.round(r.kcal*ratio);if(r.protein!=null)form.elements.protein.value=(r.protein*ratio).toFixed(1);status.className=r.confidence==='low'?'lookup-status warning':'lookup-status success';const candidateUrl=/^https?:\/\//.test(String(r.sourceUrl||''))?String(r.sourceUrl):'',candidateSource=candidateUrl?`<a href="${escapeHtml(candidateUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.sourceTitle||'查看来源')}</a>`:escapeHtml(r.sourceTitle||'未验证来源'),rawNotes=(Array.isArray(r.notes)?r.notes:[]).filter(Boolean).join('；').trim(),candidateNotes=rawNotes.slice(0,500),noteSuffix=rawNotes.length>500?'…':'';status.innerHTML=`网页候选：${escapeHtml(r.name||name)} · ${r.kcal??'未知'} kcal/${r.basis==='per100g'?'100g':'份'}<span class="api-source">${candidateSource} · 已进入候选库，使用前请确认</span>${r.kcal==null?'<span class="api-source">未找到可靠官方数据：请手动填写热量与蛋白质，或换更具体的菜品名（如“赛百味金枪鱼三明治 6英寸”）再查询。</span>':''}${candidateNotes?`<span class="api-source">候选说明：${escapeHtml(candidateNotes)}${noteSuffix}</span>`:''}`}catch(e){status.className='lookup-status error';status.textContent=`网页检索失败：${e.message}`}
 }
+$('#lookupNutritionBtn').addEventListener('click',()=>{const name=$('#manualMealForm').elements.name.value.trim();if(name)lookupUsdaNutrition(name);else{$('#nutritionLookupStatus').textContent='请先填写食物名称'}});
+function recalculateBarcodeNutrition(){const form=$('#manualMealForm'),amount=+form.elements.grams.value||0,kcal=Number(form.dataset.kcalPer100),protein=Number(form.dataset.proteinPer100);form.elements.calories.value=form.dataset.kcalPer100===''?'':Math.round(kcal*amount/100);form.elements.protein.value=form.dataset.proteinPer100===''?'':(protein*amount/100).toFixed(1)}
+$('#manualMealForm').elements.grams.addEventListener('input',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
+$('#manualMealForm').elements.unit.addEventListener('change',()=>{const form=$('#manualMealForm');if(form.dataset.nutritionBasis&&form.elements.unit.value!=='g'){clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';$('#nutritionLookupStatus').textContent='USDA 数据按克计算，改用其他单位后请手动填写营养值。'}});
+$('#manualMealForm').elements.name.addEventListener('input',()=>{const form=$('#manualMealForm');clearMealNutritionState(form);$('#nutritionLookupStatus').textContent='';form.elements.calories.value='';form.elements.protein.value=''});
+for(const field of ['calories','protein'])$('#manualMealForm').elements[field].addEventListener('input',()=>clearMealNutritionState($('#manualMealForm')));
 
 function fileToDataUrl(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}
 

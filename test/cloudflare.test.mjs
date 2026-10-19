@@ -25,7 +25,7 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
       const statements=sqlStatements(sql);
       for(let i=0;i<statements.length;i+=40)await db.batch(statements.slice(i,i+40).map(sql=>db.prepare(sql)));
     }
-    const health=await call('/api/health');assert.equal(health.data.foodCount,300);assert.equal(health.data.authoritativeFoodCount,13588);
+    const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,13588);
     assert.equal((await call('/api/user/state')).status,401);
     const alice=await call('/api/auth/register',{body:{username:'alice',password}});
     assert.equal(alice.status,201,JSON.stringify(alice.data));
@@ -36,6 +36,10 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     assert.equal((await call('/api/auth/login',{body:{username:'missing',password}})).status,401);
     assert.equal((await call('/api/auth/login',{body:{username:'alice',password:'wrong password'}})).status,401);
     const dataset=await call('/api/nutrition/dataset-search?q=rice%20cooked',{cookie});assert.equal(dataset.status,200);assert.ok(dataset.data.results.length>0);
+    const burger=await call('/api/nutrition/search?q='+encodeURIComponent('汉堡'),{cookie});assert.equal(burger.status,200);assert.equal(burger.data.result.id,'fdc:2706920');assert.equal(burger.data.needsClarification,false);assert.deepEqual(burger.data.candidates,[]);
+    const leg=await call('/api/nutrition/search?q='+encodeURIComponent('鸡腿汉堡'),{cookie});assert.equal(leg.status,200);assert.equal(leg.data.result.id,'fdc:2707000');assert.match(leg.data.result.matchNote,/未区分鸡腿/);
+    const rice=await call('/api/nutrition/search?q='+encodeURIComponent('米饭'),{cookie});assert.equal(rice.status,200);assert.equal(rice.data.result.id,'fdc:168878');
+    assert.equal((await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name IN ('foods','aliases','candidates')").first()).n,0);
     const official=await call('/api/nutrition/search?q=fdc:168878',{cookie});assert.equal(official.data.result.per100g.kcal,130);
     const loggedIn=await call('/api/auth/login',{body:{username:'alice',password}});
     assert.equal(loggedIn.status,200,JSON.stringify(loggedIn.data));

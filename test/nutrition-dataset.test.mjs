@@ -35,3 +35,44 @@ test('全文检索返回供选择的原始菜名，SQL和FTS符号不能注入�
   assert.deepEqual(await searchAuthoritativeFoods(db,"'; DROP TABLE authoritative_foods; --"),[]);
   assert.equal(db.prepare('SELECT COUNT(*) count FROM authoritative_foods').get().count,13588);
 });
+
+const {resolveAuthoritativeNutrition}=await import('../nutrition-dataset.mjs');
+const catalog=JSON.parse(readFileSync(new URL('../data/usda/chinese-foods.json',import.meta.url),'utf8'));
+test('中文映射不储存营养值，每个 FDC 指向有热量的 USDA 原始记录',async()=>{
+  const aliases=new Set();
+  for(const item of catalog.foods){
+    assert.ok(Object.keys(item).every(key=>['aliases','category','fdcId','name','matchNote','referenceAliases'].includes(key)));
+    assert.ok(!('kcal' in item)&&!('per100g' in item));
+    const source=await authoritativeFood(db,`fdc:${item.fdcId}`);assert.ok(source,item.name);
+    for(const alias of [item.name,...item.aliases]){assert.ok(!aliases.has(alias)||alias===item.name,alias);aliases.add(alias)}
+  }
+  const result=await resolveAuthoritativeNutrition(db,'白米饭');
+  assert.equal(result.nutrition.id,'fdc:168878');assert.equal(result.nutrition.per100g.kcal,130);
+  assert.match(result.nutrition.originalName,/Rice/);assert.equal(result.source,'authoritative_database');
+});
+
+test('汉堡、牛肉、芝士、鸡腿和炸鸡汉堡自动命中不同 USDA 记录，不要求三选一',async()=>{
+  const cases={'汉堡':2706920,'汉堡包':2706920,'牛肉汉堡':170693,'芝士汉堡':2706888,'鸡腿汉堡':2707000,'鸡腿堡':2707000,'鸡肉汉堡':2707000,'炸鸡汉堡':2707008,'麦当劳汉堡':170717};
+  for(const [name,id] of Object.entries(cases)){
+    const result=await resolveAuthoritativeNutrition(db,name);
+    assert.equal(result.nutrition.id,`fdc:${id}`,name);assert.equal(result.needsClarification,false);assert.deepEqual(result.candidates,[]);
+    assert.deepEqual(result.nutrition.per100g,(await authoritativeFood(db,`fdc:${id}`)).per100g);
+  }
+  const leg=await resolveAuthoritativeNutrition(db,'鸡腿汉堡');assert.match(leg.nutrition.matchNote,/未区分鸡腿和鸡胸/);assert.equal(leg.nutrition.confidence,'medium');
+});
+
+test('复合中文菜不会被单一食材覆盖；英文全文检索自动选择相关 USDA 参考并标明性质',async()=>{
+  const complex=await resolveAuthoritativeNutrition(db,'芝士培根牛肉汉堡');assert.equal(complex.nutrition,null);assert.equal(complex.candidates.length,0);
+  const cooked=await resolveAuthoritativeNutrition(db,'烤鸡胸肉');const raw=await resolveAuthoritativeNutrition(db,'生鸡胸肉');
+  assert.equal(cooked.nutrition.per100g.kcal,165);assert.equal(raw.nutrition.per100g.kcal,120);
+  const english=await resolveAuthoritativeNutrition(db,'chicken breast');assert.ok(english.nutrition);assert.equal(english.needsClarification,false);assert.equal(english.nutrition.matchType,'usda_search_reference');
+});
+
+test('模型仅翻译检索词，即使返回虚构热量或FDC编号也不能进入营养结果',async()=>{
+  const result=await resolveAuthoritativeNutrition(db,'测试中文食品',{translate:async()=>({queries:['hamburger'],kcal:1,fdcId:999999})});
+  assert.ok(result.nutrition);assert.equal(result.nutrition.confidence,'medium');
+  for(const candidate of [result.nutrition]){assert.notEqual(candidate.per100g.kcal,1);assert.notEqual(candidate.id,'fdc:999999');assert.match(candidate.source.type,/USDA/)}
+  for(const translation of [{queries:['汉堡']},{queries:['DROP TABLE; --']},{queries:['fdc:123']},{queries:[]}]){
+    assert.equal((await resolveAuthoritativeNutrition(db,'测试中文食品',{translate:async()=>translation})).nutrition,null);
+  }
+});

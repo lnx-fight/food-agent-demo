@@ -61,3 +61,9 @@ test('Tool 参数标准化中文时间、营养查询词与过敏过滤',()=>{
     profile:{allergies:'花生'}
   }).ingredients,[]);
 });
+
+test('营养查询保留用户确认的 FDC 编号和烹饪状态',()=>{
+  assert.deepEqual(controlledWorkflowTools('other','','查询 fdc:2706888 的营养'),['search_nutrition']);
+  assert.deepEqual(controlledToolArgs('search_nutrition','查询 fdc:2706888 的营养',{}),{name:'fdc:2706888'});
+  assert.deepEqual(controlledToolArgs('search_nutrition','熟鸡胸肉每100克多少热量？',{}),{name:'熟鸡胸肉'});
+});

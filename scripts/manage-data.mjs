@@ -9,7 +9,7 @@ export function verifyDatabase(path){
   const db=new DatabaseSync(path,{readOnly:true});
   try{
     if(db.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('数据库完整性校验失败');
-    for(const name of ['users','foods','accounts','account_sessions'])if(!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name))throw new Error(`备份缺少数据表：${name}`);
+    for(const name of ['users','authoritative_foods','accounts','account_sessions'])if(!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name))throw new Error(`备份缺少数据表：${name}`);
   }finally{db.close()}
 }
 export function backupDatabase(dataDirectory,backupDirectory){

@@ -8,7 +8,7 @@ import {backupDatabase,restoreDatabase,verifyDatabase} from '../scripts/manage-d
 
 test('在线WAL数据库可备份、校验并恢复到新目录，绝不覆盖现有数据',()=>{
   const root=mkdtempSync(join(tmpdir(),'xiaofan-backup-')),db=new DatabaseSync(join(root,'nutrition.sqlite'));
-  db.exec('PRAGMA journal_mode=WAL; CREATE TABLE users(name TEXT); CREATE TABLE foods(name TEXT); CREATE TABLE accounts(id TEXT); CREATE TABLE account_sessions(token_hash TEXT)');
+  db.exec('PRAGMA journal_mode=WAL; CREATE TABLE users(name TEXT); CREATE TABLE authoritative_foods(name TEXT); CREATE TABLE accounts(id TEXT); CREATE TABLE account_sessions(token_hash TEXT)');
   db.prepare('INSERT INTO users VALUES(?)').run('before backup');
   db.prepare('INSERT INTO account_sessions VALUES(?)').run('old-session-hash');
   const backup=backupDatabase(root,join(root,'backups'));
