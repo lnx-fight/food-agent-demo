@@ -8,20 +8,20 @@ const categoryData={total:2213,categories:[{id:'common',name:'常见',count:14},
 const list={foods:[food],total:1,page:1,pages:1};
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(fetcher){
- const nodes=new Map(),requests=[],events=[],documentHandlers={};let starts=0;
+ const nodes=new Map(),requests=[],events=[],documentHandlers={},navigations=[];let starts=0;
  function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='foodGrams'?'100':'',textContent:'',innerHTML:'',open:false,handlers:{},attributes:{},disabled:false,addEventListener(name,fn){this.handlers[name]=fn},setAttribute(name,value){this.attributes[name]=value},showModal(){this.open=true},close(){this.open=false},focus(){}});return nodes.get(id)}
  const document={getElementById:node,addEventListener(name,fn){documentHandlers[name]=fn},dispatchEvent(event){events.push(event)}};
- const window={XiaofanDevice:{async start(){starts++;return true}}};
+ const window={XiaofanNavigatePublic:view=>navigations.push(view),XiaofanDevice:{async start(){starts++;return true}}};
  runInNewContext(source,{window,document,Intl,URLSearchParams,CustomEvent:class{constructor(type){this.type=type}},fetch:async(path,options)=>{
   requests.push({path,options});const data=fetcher?await fetcher(path):path.includes('/categories')?categoryData:path.includes('/details')?{result:{food,nutrients:[{name:'膳食纤维',value:null,unit:'g'},{name:'钠',value:'0',unit:'mg'}]}}:list;
   return {ok:true,json:async()=>data};
  }});
  const click=(id,dataset,attributes=[])=>node(id).handlers.click({target:{closest:()=>({dataset,hasAttribute:name=>attributes.includes(name)})}});
- return {catalog:window.XiaofanCatalog,node,requests,events,documentHandlers,click,starts:()=>starts};
+ return {catalog:window.XiaofanCatalog,node,requests,events,documentHandlers,navigations,click,starts:()=>starts};
 }
 test('热量查询不创建会话、不弹个人资料；渲染分类、结果、营养详情和份量换算',async()=>{
  const h=harness();assert.equal(h.requests.length,0);
- await h.catalog.open('米饭');assert.equal(h.starts(),0);assert.equal(h.node('foodCatalog').open,true);
+ await h.catalog.open('米饭');assert.equal(h.starts(),0);assert.equal(h.navigations.at(-1),'catalog');
  assert.match(h.node('foodResults').innerHTML,/182/);assert.match(h.node('foodResults').innerHTML,/千卡/);assert.match(h.node('foodCategories').innerHTML,/主食/);
  assert.ok(h.requests.every(r=>r.path.startsWith('/api/food-catalog')&&r.options.credentials==='omit'));
  assert.match(h.requests.at(-1).path,/category=all/);
@@ -41,7 +41,7 @@ test('分类搜索和重试不进入个人流程，食品内容正确转义',asy
  await h.catalog.open();assert.match(h.node('foodResults').innerHTML,/&lt;img/);assert.doesNotMatch(h.node('foodResults').innerHTML,/<img src=x/);
  h.click('foodCategories',{foodCategory:'staple'});await flush();assert.match(h.requests.at(-1).path,/category=staple/);
  h.node('foodSearchInput').value='汉堡';h.node('foodSearchForm').handlers.submit({preventDefault(){}});await flush();assert.match(h.requests.at(-1).path,/category=all/);assert.equal(h.starts(),0);
- h.node('foodCatalogClose').handlers.click();assert.equal(h.node('foodCatalog').open,false);
+ const count=h.requests.length;await h.catalog.open();assert.equal(h.requests.length,count);assert.equal(h.navigations.at(-1),'catalog');
 });
 test('快速切换搜索时，较早的网络响应不能覆盖新结果',async()=>{
  let finishOld;
@@ -56,5 +56,5 @@ test('快速切换搜索时，较早的网络响应不能覆盖新结果',async(
 });
 test('公开入口、独立详情与记餐交接资源完整，只有记录才进入个人使用',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
- assert.match(html,/id="publicFoodSearchForm"/);assert.match(html,/<dialog id="foodCatalog"/);assert.match(source,/id="foodGrams"/);assert.match(html,/food-catalog.js/);
+ assert.match(html,/id="publicFoodSearchForm"/);assert.match(html,/<div id="foodCatalog"/);assert.match(html,/id="catalogView"/);assert.match(source,/id="foodGrams"/);assert.match(html,/food-catalog.js/);
 });

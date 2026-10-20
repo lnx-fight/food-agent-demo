@@ -17,26 +17,73 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=29" />
-  <link rel="stylesheet" href="pantry.css?v=29" />
-  <link rel="stylesheet" href="onboarding.css?v=29" />
-  <link rel="stylesheet" href="api.css?v=29" />
-  <link rel="stylesheet" href="record-status.css?v=29" />
-  <link rel="stylesheet" href="adaptive-plan.css?v=29" />
-  <link rel="stylesheet" href="account.css?v=29" />
-  <link rel="stylesheet" href="guest.css?v=29" />
-  <link rel="stylesheet" href="food-catalog.css?v=29" />
+  <link rel="stylesheet" href="styles.css?v=30" />
+  <link rel="stylesheet" href="pantry.css?v=30" />
+  <link rel="stylesheet" href="onboarding.css?v=30" />
+  <link rel="stylesheet" href="api.css?v=30" />
+  <link rel="stylesheet" href="record-status.css?v=30" />
+  <link rel="stylesheet" href="adaptive-plan.css?v=30" />
+  <link rel="stylesheet" href="account.css?v=30" />
+  <link rel="stylesheet" href="guest.css?v=30" />
+  <link rel="stylesheet" href="food-catalog.css?v=30" />
   <style>.demo-mode-banner[hidden]{display:none!important}</style>
 </head>
-<body class="guest-mode">
-  <div class="guest-home" id="guestHome">
-    <header class="guest-header">
-      <a class="guest-brand" href="index.html" aria-label="小饭首页"><img src="xiaofan-icon.png" width="40" height="40" alt="" /><strong>小饭</strong><span>让每一顿更适合你</span></a>
-      <nav aria-label="访客导航"><button type="button" data-open-food-catalog>食物热量表</button><a href="#guestDiscover">发现</a><a href="#guestGuide">如何使用</a></nav>
-      <button type="button" class="guest-enter" data-start-product>开始使用</button>
-    </header>
-    <p id="deviceConnectionStatus" class="device-connection-status" role="status" aria-live="polite"></p>
-    <main class="guest-main">
+<body class="public-mode">
+
+
+  <dialog id="foodDetail" class="food-detail" aria-labelledby="foodDetailTitle"><header class="food-detail-header"><h2 id="foodDetailTitle">食品详情</h2><button type="button" id="foodDetailClose" class="food-detail-close" aria-label="关闭食品详情">×</button></header><div id="foodDetailContent" class="food-detail-content"></div><button type="button" id="foodDetailRecord" class="food-detail-record" disabled>记录这份</button></dialog>
+  <aside class="demo-mode-banner" id="demoModeBanner" hidden role="status">
+    <strong>面试演示模式</strong>
+    <span>数据仅保存在当前浏览器；Agent、图片识别和附近餐馆展示预置响应，不调用外部 API。</span>
+  </aside>
+  <div class="app-shell" id="productApp">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"><img src="xiaofan-icon.png" width="38" height="38" alt="" /></div>
+        <div><strong>小饭</strong><small>减脂 Agent</small></div>
+      </div>
+
+      <nav class="nav-list" aria-label="主导航">
+        <button class="nav-item" data-view="today"><span class="nav-icon">⌁</span>今日</button>
+        <button class="nav-item active" data-view="catalog"><span class="nav-icon">⌕</span>食物热量表</button>
+        <button class="nav-item" data-view="week"><span class="nav-icon">▦</span>本周计划</button>
+        <button class="nav-item" data-view="agent"><span class="nav-icon">✦</span>Agent 对话<i class="live-dot"></i></button>
+        <button class="nav-item" data-view="trend"><span class="nav-icon">↗</span>体重</button>
+        <button class="nav-item" data-view="meals"><span class="nav-icon">◌</span>饮食</button>
+        <button class="nav-item" data-view="discover"><span class="nav-icon">◇</span>发现与指南</button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="agent-status-card">
+        <div class="status-row"><span class="agent-orb small"></span><strong>Agent 在线</strong></div>
+        <p>正在关注你的体重趋势和今日摄入</p>
+        <div class="memory-meter"><span style="width:72%"></span></div>
+        <small>已形成 14 天记忆</small>
+      </div>
+      <button class="profile-row" id="profileBtn">
+        <span class="avatar">我</span><span><strong>开始个人计划</strong><small>按需完善资料，无需账号</small></span><span>•••</span>
+      </button>
+      <button class="reset-link" id="accountBtn" hidden>我的数据<small class="account-sync-status" id="accountSyncStatus">正在连接</small></button>
+      <button class="reset-link" id="restartBtn" hidden>↻ 重新开始 / 清除本地数据</button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="打开菜单">☰</button>
+        <div class="date-block"><small>2026年8月17日 · 星期一</small><strong id="pageTitle">食物热量表</strong></div>
+        <div class="top-actions"><button type="button" class="secondary-btn" id="startPersonalBtn" data-start-product>开始个人计划</button>
+          <button class="icon-btn" id="notificationBtn" aria-label="提醒">♢<i></i></button>
+        </div>
+      </header>
+
+      <p id="deviceConnectionStatus" class="device-connection-status" role="status" aria-live="polite"></p>
+<section class="view active" id="catalogView">  <div id="foodCatalog" class="food-catalog" aria-labelledby="foodCatalogTitle">
+    <header class="food-catalog-header"><div class="food-catalog-top"><span class="food-catalog-intro">按分类浏览，也可以直接搜索</span><span class="food-catalog-brand"><img src="xiaofan-icon.png" alt="" width="28" height="28">小饭</span></div><div class="food-catalog-heading"><div><h2 id="foodCatalogTitle">食物热量表</h2><p>认识每一餐，从知道它的营养开始。</p></div><span class="food-catalog-count" id="catalogTotal">食药署食品数据</span></div><form id="foodSearchForm" class="food-search" role="search"><span aria-hidden="true">⌕</span><input type="search" id="foodSearchInput" aria-label="搜索热量表" placeholder="请输入食品名称" maxlength="100"><button type="button" id="foodSearchClear" class="food-search-clear" aria-label="清空搜索">×</button><button type="submit">搜索</button></form><div class="food-catalog-subhead"><span>无需登录 · 无需填写个人资料</span><span>统一按每100克可食部展示</span></div></header>
+    <div class="food-catalog-body"><nav id="foodCategories" class="food-categories" aria-label="食品分类"></nav><div class="food-list-pane"><h3 id="foodResultStatus" class="food-result-status" role="status" aria-live="polite"></h3><div id="foodResults" aria-busy="false"></div><nav class="food-pagination" aria-label="结果分页"><button type="button" id="foodPrevious" disabled>上一页</button><span id="foodPageStatus"></span><button type="button" id="foodNext" disabled>下一页</button></nav></div></div>
+    <footer class="food-catalog-footer"><span>数据来源：<a href="https://data.gov.tw/dataset/8543" target="_blank" rel="noopener noreferrer">台湾食药署食品营养成分资料集 ↗</a> · 点击名称看详情，点击 ＋ 记录</span><p id="catalogAttribution"></p></footer>
+  </div></section>
+<section class="view" id="discoverView" aria-label="发现与使用说明">  <div class="guest-home" id="guestHome">
+    <div class="guest-main">
       <section class="guest-intro" aria-labelledby="guestTitle">
         <div><p class="guest-eyebrow">每一餐，都可以有自己的节奏</p><h1 id="guestTitle">先逛逛，<br>发现下一餐的灵感。</h1><p class="guest-lead">餐食灵感、计划示例和小饭的使用方式，都可以直接浏览。想记录饮食或生成专属计划时，直接开始使用，无需注册登录。</p><div class="guest-intro-actions"><a href="#guestDiscover" class="guest-explore">随便看看 ↓</a><button type="button" class="guest-start" data-start-product>记录我的一餐</button></div></div>
         <div class="guest-intro-art" aria-hidden="true"><span class="guest-art-label">YOUR NEXT MEAL</span><img src="xiaofan-icon.png" width="176" height="176" alt="" /><span class="guest-art-note">好好吃饭，也好好生活。</span></div>
@@ -54,61 +101,12 @@
           <article class="guest-feed-card" data-guest-group="plan"><div class="guest-cover guest-cover-trend" aria-hidden="true"><span class="guest-cover-tag">记录示例</span><svg viewBox="0 0 260 100"><path d="M10 25 Q40 48 65 40 T110 53 T155 47 T200 68 T250 60" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M10 85 H250" stroke="currentColor" stroke-opacity=".15"/></svg><small>看见变化，也保留真实的过程</small></div><div class="guest-card-body"><h3>让每天的小记录，慢慢连成一条线</h3><p>饮食与体重按日期保存，可以回看、补登，也可以自行修改。</p><details><summary>了解记录与隐私</summary><p>示例曲线不对应任何人的真实数据。你的档案、体重、饮食和对话只在当前浏览器的个人使用空间中展示。</p></details><button type="button" data-start-product>查看我的记录 <span>↗</span></button></div></article>
         </div>
       </section>
-      <section id="guestGuide" class="guest-guide" aria-labelledby="guestGuideTitle"><div><p class="guest-eyebrow">按自己的节奏开始</p><h2 id="guestGuideTitle">喜欢就用，无需注册登录。</h2><p>先浏览公开内容；点击“开始使用”即可记录和规划。记录与当前浏览器绑定，不支持跨设备登录恢复。</p></div><ol><li><b>01</b><span><strong>先发现</strong>看看餐食灵感和功能示例。</span></li><li><b>02</b><span><strong>直接开始使用</strong>无需用户名和密码，完善档案即可记录和规划。</span></li><li><b>03</b><span><strong>开始自己的计划</strong>完善档案，保存属于自己的真实记录。</span></li></ol></section>
+      <section id="guestGuide" class="guest-guide" aria-labelledby="guestGuideTitle"><div><p class="guest-eyebrow">按自己的节奏开始</p><h2 id="guestGuideTitle">喜欢就用，无需注册登录。</h2><p>所有功能都在左侧导航中。热量表和使用说明可直接查看；记录和规划时再完善资料，记录与当前浏览器绑定。</p></div><ol><li><b>01</b><span><strong>先发现</strong>看看餐食灵感和功能示例。</span></li><li><b>02</b><span><strong>直接开始使用</strong>无需用户名和密码，完善档案即可记录和规划。</span></li><li><b>03</b><span><strong>开始自己的计划</strong>完善档案，保存属于自己的真实记录。</span></li></ol></section>
       <footer class="guest-footer"><span>小饭 · 让每一顿更适合你</span><a href="https://data.gov.tw/dataset/8543" target="_blank" rel="noopener noreferrer">营养数据来源：台湾食药署食品营养成分资料集 ↗</a><small class="guest-data-attribution">卫生福利部食品药物管理署，2026，食品营养成分资料集（小饭下载快照2026-10-20）。依<a href="https://data.gov.tw/license" target="_blank" rel="noopener noreferrer">政府资料开放授权条款第1版</a>使用；简体名称及检索别名由小饭整理。</small></footer>
-    </main>
+    </div>
   </div>
-
-  <dialog id="foodCatalog" class="food-catalog" aria-labelledby="foodCatalogTitle">
-    <header class="food-catalog-header"><div class="food-catalog-top"><button type="button" id="foodCatalogClose" class="food-catalog-back">‹ 返回</button><span class="food-catalog-brand"><img src="xiaofan-icon.png" alt="" width="28" height="28">小饭</span></div><div class="food-catalog-heading"><div><h2 id="foodCatalogTitle">食物热量表</h2><p>认识每一餐，从知道它的营养开始。</p></div><span class="food-catalog-count" id="catalogTotal">食药署食品数据</span></div><form id="foodSearchForm" class="food-search" role="search"><span aria-hidden="true">⌕</span><input type="search" id="foodSearchInput" aria-label="搜索热量表" placeholder="请输入食品名称" maxlength="100"><button type="button" id="foodSearchClear" class="food-search-clear" aria-label="清空搜索">×</button><button type="submit">搜索</button></form><div class="food-catalog-subhead"><span>无需登录 · 无需填写个人资料</span><span>统一按每100克可食部展示</span></div></header>
-    <div class="food-catalog-body"><nav id="foodCategories" class="food-categories" aria-label="食品分类"></nav><div class="food-list-pane"><h3 id="foodResultStatus" class="food-result-status" role="status" aria-live="polite"></h3><div id="foodResults" aria-busy="false"></div><nav class="food-pagination" aria-label="结果分页"><button type="button" id="foodPrevious" disabled>上一页</button><span id="foodPageStatus"></span><button type="button" id="foodNext" disabled>下一页</button></nav></div></div>
-    <footer class="food-catalog-footer"><span>数据来源：<a href="https://data.gov.tw/dataset/8543" target="_blank" rel="noopener noreferrer">台湾食药署食品营养成分资料集 ↗</a> · 点击名称看详情，点击 ＋ 记录</span><p id="catalogAttribution"></p></footer>
-  </dialog>
-  <dialog id="foodDetail" class="food-detail" aria-labelledby="foodDetailTitle"><header class="food-detail-header"><h2 id="foodDetailTitle">食品详情</h2><button type="button" id="foodDetailClose" class="food-detail-close" aria-label="关闭食品详情">×</button></header><div id="foodDetailContent" class="food-detail-content"></div><button type="button" id="foodDetailRecord" class="food-detail-record" disabled>记录这份</button></dialog>
-  <aside class="demo-mode-banner" id="demoModeBanner" hidden role="status">
-    <strong>面试演示模式</strong>
-    <span>数据仅保存在当前浏览器；Agent、图片识别和附近餐馆展示预置响应，不调用外部 API。</span>
-  </aside>
-  <div class="app-shell" id="productApp" inert>
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark"><img src="xiaofan-icon.png" width="38" height="38" alt="" /></div>
-        <div><strong>小饭</strong><small>减脂 Agent</small></div>
-      </div>
-
-      <nav class="nav-list" aria-label="主导航">
-        <button class="nav-item active" data-view="today"><span class="nav-icon">⌁</span>今日</button>
-        <button class="nav-item" data-view="week"><span class="nav-icon">▦</span>本周计划</button>
-        <button class="nav-item" data-view="agent"><span class="nav-icon">✦</span>Agent 对话<i class="live-dot"></i></button>
-        <button class="nav-item" data-view="trend"><span class="nav-icon">↗</span>体重</button>
-        <button class="nav-item" data-view="meals"><span class="nav-icon">◌</span>饮食</button>
-      </nav>
-
-      <div class="sidebar-spacer"></div>
-      <div class="agent-status-card">
-        <div class="status-row"><span class="agent-orb small"></span><strong>Agent 在线</strong></div>
-        <p>正在关注你的体重趋势和今日摄入</p>
-        <div class="memory-meter"><span style="width:72%"></span></div>
-        <small>已形成 14 天记忆</small>
-      </div>
-      <button class="profile-row" id="profileBtn">
-        <span class="avatar">我</span><span><strong>我的测试档案</strong><small>22岁女性 · 157.5 cm</small></span><span>•••</span>
-      </button>
-      <button class="reset-link" type="button" data-open-food-catalog>食物热量表</button>
-      <button class="reset-link" id="accountBtn" hidden>我的数据<small class="account-sync-status" id="accountSyncStatus">正在连接</small></button>
-      <button class="reset-link" id="restartBtn" hidden>↻ 重新开始 / 清除本地数据</button>
-    </aside>
-
-    <main class="main-content">
-      <header class="topbar">
-        <button class="mobile-menu" id="mobileMenu" aria-label="打开菜单">☰</button>
-        <div class="date-block"><small>2026年8月17日 · 星期一</small><strong id="pageTitle">今日计划</strong></div>
-        <div class="top-actions">
-          <button class="icon-btn" id="notificationBtn" aria-label="提醒">♢<i></i></button>
-        </div>
-      </header>
-
-      <section class="view active" id="todayView">
+</section>
+      <section class="view" id="todayView">
         <div class="hero-grid">
           <article class="agent-brief">
             <div class="brief-top">
@@ -317,10 +315,10 @@
     </div>
   </div>
 
-  <div class="onboarding" id="onboarding">
+  <div class="onboarding hidden" id="onboarding">
     <div class="onboarding-brand"><div class="brand-mark"><img src="xiaofan-icon.png" width="38" height="38" alt="" /></div><div><strong>小饭</strong><small>你的个人减脂 Agent</small></div></div>
     <div class="onboarding-shell">
-      <div class="onboarding-copy"><span class="eyebrow">START WITH YOUR GOAL</span><h1>先认识一下你</h1><p id="onboardingDataNote">无需注册登录。档案和记录与当前浏览器绑定；清除浏览器数据或更换设备后无法自动恢复。完成建档后，Agent才能根据你的真实状态工作。</p><div class="onboarding-points"><span id="onboardingStoragePoint">✓ 此浏览器保存，可导出或清空</span><span>✓ 确定性工具负责关键计算</span><span>✓ 计划随体重与目标动态更新</span></div><button type="button" class="account-link" id="onboardingAccount" hidden>管理我的数据</button></div>
+      <div class="onboarding-copy"><span class="eyebrow">START WITH YOUR GOAL</span><h1>先认识一下你</h1><p id="onboardingDataNote">无需注册登录。档案和记录与当前浏览器绑定；清除浏览器数据或更换设备后无法自动恢复。完成建档后，Agent才能根据你的真实状态工作。</p><div class="onboarding-points"><span id="onboardingStoragePoint">✓ 此浏览器保存，可导出或清空</span><span>✓ 确定性工具负责关键计算</span><span>✓ 计划随体重与目标动态更新</span></div><button type="button" class="account-link" id="cancelOnboarding">暂不填写，继续查询热量</button><button type="button" class="account-link" id="onboardingAccount" hidden>管理我的数据</button></div>
       <form class="onboarding-form" id="onboardingForm">
         <div class="steps"><i class="active"></i><i></i><i></i></div>
         <section class="form-step active" data-step="1">
@@ -371,10 +369,10 @@
       <p id="accountPanelMessage" class="account-message" role="status"></p>
     </div>
   </div>
-  <script src="account-ui.js?v=29"></script>
-  <script src="guest-ui.js?v=29"></script>
-  <script src="food-catalog.js?v=29"></script>
-  <script src="app.js?v=29"></script>
-  <script src="adaptive-plan.js?v=29"></script>
+  <script src="account-ui.js?v=30"></script>
+  <script src="guest-ui.js?v=30"></script>
+  <script src="food-catalog.js?v=30"></script>
+  <script src="app.js?v=30"></script>
+  <script src="adaptive-plan.js?v=30"></script>
 </body>
 </html>

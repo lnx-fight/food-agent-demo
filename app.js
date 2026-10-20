@@ -1,5 +1,5 @@
 const state = {
-  currentView: 'today',
+  currentView: 'catalog',
   calories: 688,
   protein: 42,
   tasks: { breakfast: true, lunch: false, walk: false },
@@ -37,6 +37,7 @@ let onboardingStep = 1;
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+$('.date-block small').textContent=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'long',day:'numeric',weekday:'long'}).format(new Date());
 const formatNumber=(value,maxDecimals=2)=>{const number=Number(value);if(!Number.isFinite(number))return '0';return new Intl.NumberFormat('zh-CN',{maximumFractionDigits:Math.min(2,Math.max(0,maxDecimals)),useGrouping:false}).format(number)};
 function nutritionLevelShort(level='low'){
   return ({high:'来源可靠',medium:'近似匹配',low:'待核验估算'})[level]||'待核验估算';
@@ -54,15 +55,24 @@ function showToast(text,duration=2600,icon='✓',extraClass=''){
   clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.classList.remove('show'),duration);
 }
 
-function switchView(view){
-  state.currentView=view;
-  $$('.view').forEach(v=>v.classList.remove('active'));
-  $(`#${view}View`).classList.add('active');
-  $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view));
-  const titles={today:'今日计划',week:'本周计划',agent:'Agent 对话',trend:'体重',meals:'饮食与食谱'};
-  $('#pageTitle').textContent=titles[view];
-  $('.sidebar').classList.remove('open'); window.scrollTo({top:0,behavior:'smooth'});
+let pendingPersonalView='today';
+const PUBLIC_VIEWS=new Set(['catalog','discover']);
+function showView(view){
+  const target=$('#'+view+'View');if(!target)return;
+  state.currentView=view;$$('.view').forEach(v=>v.classList.remove('active'));target.classList.add('active');
+  $$('.nav-item').forEach(n=>{n.classList.toggle('active',n.dataset.view===view);if(n.dataset.view===view)n.setAttribute('aria-current','page');else n.removeAttribute('aria-current')});
+  const titles={today:'今日计划',catalog:'食物热量表',discover:'发现与指南',week:'本周计划',agent:'Agent 对话',trend:'体重',meals:'饮食与食谱'};
+  $('#pageTitle').textContent=titles[view];$('.sidebar').classList.remove('open');window.scrollTo({top:0,behavior:'smooth'});
 }
+async function switchView(view){
+  if(!PUBLIC_VIEWS.has(view)){
+    pendingPersonalView=view;
+    if(!accountReady&&!await window.XiaofanDevice.start())return;
+    if(!userData?.profile?.age){initOnboarding();return}
+  }
+  showView(view);if(view==='catalog')await window.XiaofanCatalog.open();
+}
+window.XiaofanNavigatePublic=view=>{if(PUBLIC_VIEWS.has(view))showView(view)};
 
 $$('.nav-item').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 $$('[data-view-jump]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.viewJump)));
@@ -293,10 +303,10 @@ function openMealRecord(date=localDateKey(),type=mealTypeByTime()){
   setActiveMealType(type);const form=$('#manualMealForm');form.reset();delete form.dataset.editingId;clearMealNutritionState(form);form.elements.type.value=type;prepareMealRecordForm(date);form.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';openModal('manualMealModal');
 }
 async function resumeCatalogFood(){
-  if(!userData?.profile?.age)return;
+  if(!userData?.profile?.age){pendingPersonalView='today';if(accountReady)initOnboarding();return}
   const selected=window.XiaofanCatalog?.takeSelection();
   if(!selected||!/^tfda:[A-R]\d{4,8}$/.test(selected.id)||!(selected.grams>0&&selected.grams<=3000))return;
-  openMealRecord();
+  showView('today');openMealRecord();
   await lookupDatasetNutrition(selected.id);
   const form=$('#manualMealForm');
   if(form.dataset.matchedReference!==selected.id)return;
@@ -369,11 +379,12 @@ $('#onboardingForm').addEventListener('submit',e=>{
   e.preventDefault();if(!validateStep(3))return;
   const profile=onboardingValues();
   userData={profile,weightLogs:[{date:localDateKey(),weight:profile.weight,createdAt:new Date().toISOString()}],mealLogs:[],chatHistory:[],weeklyPlan:null,pendingWeeklyPlan:null,upcomingWeeklyPlan:null,weeklyPlanHistory:[],dayClosures:[],reminderSettings:{enabled:false,maxPerDay:3,quietStart:'22:00',quietEnd:'08:00'},menuImports:[],createdAt:new Date().toISOString()};
-  saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showToast('建档完成，Agent已生成你的第一份计划');resumeCatalogFood();
+  saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showView(pendingPersonalView);showToast('建档完成，Agent已生成你的第一份计划');resumeCatalogFood();
 });
 
 function hydrateApp(){
   if(!userData)return;
+  document.body.classList.remove('public-mode');$('#startPersonalBtn').hidden=true;
   const p=userData.profile,m=calculateProfile(p),weights=userData.weightLogs||[],latest=weights.length?weights[weights.length-1].weight:p.weight;
   if(migrateTasteProfile(p))saveUser();
   p.weight=latest;
@@ -495,7 +506,7 @@ $('#restartBtn').addEventListener('click',()=>{
   if(confirm('这会清除当前浏览器里的档案、体重和饮食记录。确定重新开始吗？')){localStorage.removeItem(STORAGE_KEY);location.reload()}
 });
 const preferencesForm=$('#preferencesForm');
-$('#profileBtn').onclick=()=>{if(!userData)return showToast('尚未建档');const p=userData.profile,taste=p.tastePreference||(/重辣/.test(p.preferences)?'重辣':/中辣|爱吃辣|喜欢辣/.test(p.preferences)?'中辣':/微辣/.test(p.preferences)?'微辣':'不辣');preferencesForm.reset();for(const [name,value] of Object.entries({name:p.name||'',age:p.age||'',sex:p.sex||'female',height:p.height||'',activity:p.activity||'sedentary',mealMode:p.mealMode||'mixed',habit:p.habit||'',tastePreference:taste,preferences:p.preferences||'',dislikedFoods:p.dislikedFoods||'',allergies:p.allergies||''}))preferencesForm.elements[name].value=value;openModal('preferencesModal')};
+$('#profileBtn').onclick=()=>{if(!userData)return switchView('today');const p=userData.profile,taste=p.tastePreference||(/重辣/.test(p.preferences)?'重辣':/中辣|爱吃辣|喜欢辣/.test(p.preferences)?'中辣':/微辣/.test(p.preferences)?'微辣':'不辣');preferencesForm.reset();for(const [name,value] of Object.entries({name:p.name||'',age:p.age||'',sex:p.sex||'female',height:p.height||'',activity:p.activity||'sedentary',mealMode:p.mealMode||'mixed',habit:p.habit||'',tastePreference:taste,preferences:p.preferences||'',dislikedFoods:p.dislikedFoods||'',allergies:p.allergies||''}))preferencesForm.elements[name].value=value;openModal('preferencesModal')};
 preferencesForm.addEventListener('submit',e=>{e.preventDefault();if(!userData||!e.target.reportValidity())return;const form=new FormData(e.target),profile=userData.profile,next={name:String(form.get('name')||'').trim(),age:+form.get('age'),sex:String(form.get('sex')||'female'),height:+form.get('height'),activity:String(form.get('activity')||'sedentary'),mealMode:String(form.get('mealMode')||'mixed'),habit:String(form.get('habit')||'').trim(),tastePreference:String(form.get('tastePreference')||'不辣'),preferences:removeTastePreferenceClauses(String(form.get('preferences')||'')),dislikedFoods:String(form.get('dislikedFoods')||'').trim(),allergies:String(form.get('allergies')||'').trim()};for(const key of Object.keys(next))delete profile[key];Object.assign(profile,next,{profileUpdatedAt:new Date().toISOString(),preferencesUpdatedAt:new Date().toISOString()});delete profile.longTermMemory;agentConversation.length=0;userData.chatHistory=[];saveUser();$('#chatMessages').innerHTML='';closeModals();hydrateApp();addTrace('✓','当前个人信息已更新','replace_current_profile',[profile.activity,profile.mealMode,profile.habit,profile.tastePreference,profile.preferences,profile.dislikedFoods,profile.allergies].filter(Boolean).join(' · '));showToast('个人信息已覆盖更新，旧偏好相关对话已清理')});
 
 // Real LLM conversation with controlled UI actions.
@@ -565,13 +576,13 @@ handleAgentPrompt = async function(prompt){
 };
 
 if(DEMO_MODE){
-  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#guestHome').hidden=true;$('#productApp').inert=false;document.body.classList.remove('account-loading','guest-mode');$('#restartBtn').hidden=false;
+  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#productApp').inert=false;document.body.classList.remove('public-mode');$('#restartBtn').hidden=false;
   $('#onboardingDataNote').textContent='演示数据只保存在当前浏览器中。完成建档后即可体验预置交互。';$('#onboardingStoragePoint').textContent='✓ 本地保存，可随时清除';
   userData=loadUser();if(userData){$('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation()}else initOnboarding();
-  loadServerUser();pollAgent();runDailyReview();connectAgentEvents();
+  loadServerUser();pollAgent();runDailyReview();connectAgentEvents();switchView('catalog');
 }else{
   window.XiaofanDevice.boot({
-    guest(){accountReady=false;userData=null;agentEventSource?.close();clearTimeout(serverSyncTimer);closeModals()},
+    guest(){accountReady=false;userData=null;agentEventSource?.close();clearTimeout(serverSyncTimer);closeModals();$('#onboarding').classList.add('hidden');$('#startPersonalBtn').hidden=false;$('#accountBtn').hidden=true;$('#profileBtn strong').textContent='开始个人计划';$('#profileBtn small').textContent='按需完善资料，无需账号';$('#profileBtn .avatar').textContent='我';switchView('catalog')},
     ready(account,remote){
       STORAGE_KEY=`fitpilot_account_${account.id}`;CLIENT_ID=account.id;accountVersion=remote.stateVersion;accountReady=true;
       lastStoredSnapshot=localStorage.getItem(STORAGE_KEY);
@@ -597,6 +608,7 @@ if(DEMO_MODE){
     forget(){clearTimeout(serverSyncTimer);accountReady=false;userData=null;agentEventSource?.close();localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(STORAGE_KEY+'_sync');localStorage.removeItem(pendingKey())}
   });
 }
+$('#cancelOnboarding').addEventListener('click',()=>{$('#onboarding').classList.add('hidden');window.XiaofanCatalog?.takeSelection();switchView('catalog')});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 const adjustGoalForm=$('#adjustGoalForm');

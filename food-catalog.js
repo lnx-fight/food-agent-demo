@@ -2,7 +2,7 @@
 window.XiaofanCatalog=(()=>{
   const el=id=>document.getElementById(id),esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt=value=>new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2,useGrouping:false}).format(value);
-  let category='common',query='',page=1,listRequest=0,detailRequest=0,selected=null,pendingMeal=null,categories=null,detailFood=null;
+  let category='common',query='',page=1,listRequest=0,detailRequest=0,selected=null,pendingMeal=null,categories=null,detailFood=null,initialized=false;
   const foods=new Map();
   async function request(path){const response=await fetch(path,{credentials:'omit'}),data=await response.json();if(!response.ok)throw new Error(data.error||'暂时无法读取，请重试。');return data}
   function errorText(error){return error?.message||'暂时无法读取，请重试。'}
@@ -22,18 +22,19 @@ window.XiaofanCatalog=(()=>{
     renderCategories();
     try{
       const data=await request('/api/food-catalog?'+new URLSearchParams({q:query,category,page:String(page)}));if(token!==listRequest)return;
-      page=data.page;data.foods.forEach(food=>foods.set(food.id,food));
+      initialized=true;page=data.page;data.foods.forEach(food=>foods.set(food.id,food));
       el('foodResultStatus').textContent=query?`“${query}” · 找到 ${data.total} 项食品`:`${categories?.categories.find(item=>item.id===category)?.name||'食品'} · 共 ${data.total} 项`;
       el('foodResults').innerHTML=data.foods.length?data.foods.map(food=>`<article class="food-row"><button class="food-row-main" type="button" data-food-detail="${esc(food.id)}" aria-label="查看${esc(food.displayName)}的营养详情"><span class="food-icon" aria-hidden="true">${esc(food.icon)}</span><span class="food-row-copy"><strong>${esc(food.displayName)}</strong><span class="food-calories"><b>${fmt(food.per100g.kcal)}</b> 千卡<span>/100克</span></span><small>${esc(food.name!==food.displayName?`样品：${food.name} · `:'')}${esc(food.matchNote||food.description||food.categoryLabel)}</small></span></button><button type="button" class="food-add" data-food-record="${esc(food.id)}" aria-label="记录${esc(food.displayName)}">＋</button></article>`).join(''):'<div class="food-empty"><span aria-hidden="true">⌕</span><h3>没有找到对应食品</h3><p>试试更具体的食品名、常见别名或 TFDA 编号。<br>当前数据库未收录的菜品不会用某个食材代替。</p><button type="button" data-food-reset>查看全部食品</button></div>';
       el('foodPageStatus').textContent=`第 ${page} / ${data.pages} 页`;el('foodPrevious').disabled=page<=1;el('foodNext').disabled=page>=data.pages;
     }catch(error){if(token===listRequest){el('foodResultStatus').textContent='读取失败';el('foodResults').innerHTML=`<div class="food-empty"><p>${esc(errorText(error))}</p><button type="button" data-food-retry>重新加载</button></div>`;el('foodPageStatus').textContent=''}}
     finally{if(token===listRequest)el('foodResults').setAttribute('aria-busy','false')}
   }
-  async function open(initialQuery='',initialCategory='common'){
-    query=String(initialQuery||'').trim().slice(0,100);category=query?'all':initialCategory;page=1;el('foodSearchInput').value=query;
-    if(!el('foodCatalog').open)el('foodCatalog').showModal();el('foodSearchInput').focus();
+  async function open(initialQuery=null,initialCategory=null){
+    window.XiaofanNavigatePublic?.('catalog');
+    if(initialQuery!==null){query=String(initialQuery).trim().slice(0,100);category=query?'all':initialCategory||'common';page=1;el('foodSearchInput').value=query}
+    else if(initialCategory!==null){category=initialCategory;page=1}
     try{await loadCategories()}catch{el('catalogTotal').textContent='食药署食品数据';el('foodCategories').innerHTML='<button type="button" data-food-category="all">全部食品</button>'}
-    await load();
+    if(!initialized||initialQuery!==null||initialCategory!==null)await load();
   }
   function nutrientValue(value,unit='',grams=100){return value==null?'未知':`${fmt(Number(value)*grams/100)}${unit?` ${unit}`:''}`}
   function renderPortion(){
@@ -55,7 +56,7 @@ window.XiaofanCatalog=(()=>{
     }catch(error){if(token===detailRequest)el('foodDetailContent').innerHTML=`<p class="food-empty">${esc(errorText(error))}</p>`}
   }
   async function record(id,grams=100){
-    pendingMeal={id,grams};el('foodDetail').close();el('foodCatalog').close();
+    pendingMeal={id,grams};el('foodDetail').close();
     if(await window.XiaofanDevice.start())document.dispatchEvent(new CustomEvent('xiaofan:food-selected'));
   }
   el('foodSearchForm').addEventListener('submit',event=>{event.preventDefault();query=el('foodSearchInput').value.trim().slice(0,100);category='all';page=1;load()});
@@ -72,7 +73,7 @@ window.XiaofanCatalog=(()=>{
   });
   el('foodDetailContent').addEventListener('input',event=>{if(event.target.id==='foodGrams')renderPortion()});
   el('foodDetailRecord').addEventListener('click',()=>{const grams=Number(el('foodGrams')?.value);if(detailFood&&grams>0&&grams<=3000)record(detailFood.id,grams)});
-  el('foodCatalogClose').addEventListener('click',()=>el('foodCatalog').close());el('foodDetailClose').addEventListener('click',()=>el('foodDetail').close());
+  el('foodDetailClose').addEventListener('click',()=>el('foodDetail').close());
   document.addEventListener('click',event=>{if(event.target.closest('[data-open-food-catalog]'))open()});
   return {open,takeSelection(){const value=pendingMeal;pendingMeal=null;return value}};
 })();

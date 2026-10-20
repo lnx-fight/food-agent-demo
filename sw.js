@@ -1,7 +1,7 @@
 // 小饭 PWA Service Worker：应用外壳缓存优先，API 一律走网络
 // 修改应用壳文件时同步递增版本，避免缓存优先策略继续提供旧版 app.js。
-const CACHE='xiaofan-v29';
-const SHELL=['./','./index.html','./styles.css?v=29','./app.js?v=29','./adaptive-plan.js?v=29','./pantry.css?v=29','./onboarding.css?v=29','./api.css?v=29','./record-status.css?v=29','./adaptive-plan.css?v=29','./account-ui.js?v=29','./account.css?v=29','./guest.css?v=29','./guest-ui.js?v=29','./food-catalog.js?v=29','./food-catalog.css?v=29','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
+const CACHE='xiaofan-v30';
+const SHELL=['./','./index.html','./styles.css?v=30','./app.js?v=30','./adaptive-plan.js?v=30','./pantry.css?v=30','./onboarding.css?v=30','./api.css?v=30','./record-status.css?v=30','./adaptive-plan.css?v=30','./account-ui.js?v=30','./account.css?v=30','./guest.css?v=30','./guest-ui.js?v=30','./food-catalog.js?v=30','./food-catalog.css?v=30','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
@@ -15,6 +15,15 @@ self.addEventListener('fetch',event=>{
   const request=event.request,url=new URL(request.url);
   if(request.method!=='GET'||url.origin!==location.origin)return;
   if(url.pathname.includes('/api/'))return; // 数据接口永不缓存
+  // Online navigation must use the deployed page; keep cached HTML for offline use.
+  if(request.mode==='navigate'){
+    event.respondWith(fetch(request).then(async response=>{
+      if(!response.ok)throw new Error('Page unavailable');
+      try{const cache=await caches.open(CACHE);await cache.put(request,response.clone())}catch{}
+      return response;
+    }).catch(async()=>await caches.match(request)||await caches.match('./index.html')||new Response('网络不可用，请联网后重试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}})));
+    return;
+  }
   event.respondWith(
     caches.match(request).then(hit=>{
       const network=fetch(request).then(response=>{

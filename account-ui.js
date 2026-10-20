@@ -11,7 +11,7 @@ window.XiaofanDevice=(()=>{
     const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   function showGuest(){
-    loaded=false;document.body.classList.add('guest-mode');el('guestHome').hidden=false;el('productApp').inert=true;bridge?.guest?.();
+    loaded=false;document.body.classList.add('public-mode');el('productApp').inert=false;bridge?.guest?.();
   }
   function connectionMessage(value){el('deviceConnectionStatus').textContent=value}
   async function enter(device){
@@ -20,8 +20,8 @@ window.XiaofanDevice=(()=>{
     if(verified.device?.id!==device.id)throw new Error('请允许本站保存浏览器数据后重试。');
     const remote=await request('/api/user/state');
     bridge.ready(device,remote);loaded=true;
-    el('guestHome').hidden=true;el('productApp').inert=false;el('accountBtn').hidden=false;el('onboardingAccount').hidden=false;
-    document.body.classList.remove('guest-mode');connectionMessage('');
+    el('productApp').inert=false;el('accountBtn').hidden=false;el('onboardingAccount').hidden=false;
+    connectionMessage('');
   }
   async function start(){
     if(loaded)return true;if(connecting)return connecting;
@@ -33,7 +33,7 @@ window.XiaofanDevice=(()=>{
     })();return connecting;
   }
   async function boot(callbacks){
-    // Every visit starts with public browsing. Only an explicit use action
+    // Every visit uses the same workspace. Only an explicit personal action
     // creates/renews the browser identity or loads a personal profile.
     bridge=callbacks;showGuest();
   }
