@@ -92,3 +92,12 @@ test('空气炸锅中不误判为炒锅；相同厨具生成后可再次复用',
     const next=await createDiyRecipe({...input,cookTools:'空气炸锅'});assert.equal(next.generatedBy,'library');assert.equal(calls(),1);
   });
 });
+
+test('千问免费额度耗尽时明确告知降级，不写入共享菜谱',async()=>{
+  const original=globalThis.fetch,key=process.env.DASHSCOPE_API_KEY,before=db.prepare('SELECT COUNT(*) n FROM recipes').get().n;process.env.DASHSCOPE_API_KEY='test-only';
+  globalThis.fetch=async()=>Response.json({error:{message:'Free quota exhausted.',code:'AllocationQuota.FreeTierOnlyQuotaExhausted'}},{status:403});
+  try{
+    const r=await createDiyRecipe({...input,cookTime:'30分钟',profile:{tastePreference:'中辣'}});
+    assert.equal(r.generatedBy,'rules');assert.equal(r.cache.reason,'model_quota_exhausted');assert.match(r.generationNotice,/免费额度已用完/);assert.equal(db.prepare('SELECT COUNT(*) n FROM recipes').get().n,before);
+  }finally{globalThis.fetch=original;process.env.DASHSCOPE_API_KEY=key}
+});

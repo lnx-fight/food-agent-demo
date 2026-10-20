@@ -205,7 +205,7 @@ async function createDiyRecipe(input){
       if(unsupported.length)throw new Error('步骤出现未列入配料的食材');
       plan={name:plan.name.trim(),ingredients:plan.ingredients.map(item=>({name:item.name,grams:item.grams})),steps:plan.steps,waterMl:plan.waterMl||0,minutes:plan.minutes,reason:'根据现有食材规划的家常食谱。',uncertainties:(Array.isArray(plan.uncertainties)?plan.uncertainties:[]).filter(item=>typeof item==='string').slice(0,5)};
       generatedBy='qwen';
-    }catch(error){console.warn(`DIY recipe validation/model fallback: ${error.message}`);plan=null;cache={status:'not_saved',reason:'model_or_validation_failed'}}
+    }catch(error){console.warn(`DIY recipe validation/model fallback: ${error.message}`);plan=null;cache={status:'not_saved',reason:/Free quota exhausted|FreeTierOnlyQuotaExhausted|quota.*exhausted/i.test(error.message)?'model_quota_exhausted':'model_or_validation_failed'}}
   }
   if(!plan)plan=fallbackRecipePlan(availableFoods,input.cookTime,input.cookTools);
   const recipe=calculateRecipeNutrition(plan,availableFoods);
@@ -219,7 +219,7 @@ async function createDiyRecipe(input){
     }
     catch(error){cache={status:'not_saved',reason:'write_failed'};console.warn(`DIY recipe save failed: ${error.message}`)}
   }
-  return {recipe,matched:safeMatched.map(normalizeFood),unmatched,generatedBy,cache,targets};
+  return {recipe,matched:safeMatched.map(normalizeFood),unmatched,generatedBy,cache,targets,...(cache.reason==='model_quota_exhausted'?{generationNotice:'智能生成的免费额度已用完，暂时提供基础做法；未保存为新菜谱。'}:{})};
 }
 function diyFoodQuery(name){
   const aliases={芹菜:'E37002',西葫芦:'E7100201',韭菜:'E2600201',小葱:'E23001',香干:'R4700202',豆干:'R4700203',鲜香菇:'G08001',香菇:'G08001',鲜山药:'B01002',青椒:'E75001',鲈鱼肉:'J04044',猪后腿瘦肉:'I0302301',瘦牛肉:'I0104201',大白菜:'E33001',小白菜:'E3200601',黄瓜:'E6400301'};
@@ -1339,7 +1339,7 @@ function renderRecipeResult(message,entry,ctx){
   else if(/刚才说错|重新推荐/.test(message))prefix='已以后轮纠正和海鲜过敏约束为准，不使用被否定的食材。\n\n';
   else if(targets.budgetStatus==='exhausted'||ctx.targets?.budgetStatus==='exhausted')prefix='今天虽然已经超出理论参考，晚餐仍应正常、规律地吃，不需要跳餐或跨日补偿。\n\n';
   const dateNote=ctx.dayOffset===1?'这是明天的餐食，不扣减今天已经摄入的热量。\n\n':'';
-  return controlledAgentResult(`${prefix}${dateNote}推荐：**${recipe.name}**\n\n食材：${ingredients}\n\n做法：\n${steps}\n\n预计耗时：${Number(recipe.minutes)||20}分钟；营养值约 ${Math.round(Number(nutrition.kcal)||0)} kcal、蛋白质 ${nutrition.protein==null?'未知':Number(nutrition.protein)+'g'}。${uncertainties?`主要误差来源：${uncertainties}。`:''}`,'meal');
+  return controlledAgentResult(`${entry.result.generationNotice?entry.result.generationNotice+'\n\n':''}${prefix}${dateNote}推荐：**${recipe.name}**\n\n食材：${ingredients}\n\n做法：\n${steps}\n\n预计耗时：${Number(recipe.minutes)||20}分钟；营养值约 ${Math.round(Number(nutrition.kcal)||0)} kcal、蛋白质 ${nutrition.protein==null?'未知':Number(nutrition.protein)+'g'}。${uncertainties?`主要误差来源：${uncertainties}。`:''}`,'meal');
 }
 function buildControlledAgentResult({message,routeIntent,mealScenario,ctx,dispatched,proposal}){
   const text=String(message||''),failed=dispatched.results.find(entry=>!entry.ok);
