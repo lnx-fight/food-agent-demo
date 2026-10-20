@@ -1,7 +1,7 @@
 // 小饭 PWA Service Worker：应用外壳缓存优先，API 一律走网络
 // 修改应用壳文件时同步递增版本，避免缓存优先策略继续提供旧版 app.js。
-const CACHE='xiaofan-v24';
-const SHELL=['./','./index.html','./styles.css','./app.js','./adaptive-plan.js','./pantry.css','./onboarding.css','./api.css','./record-status.css','./adaptive-plan.css','./account-ui.js','./account.css','./guest.css','./guest-ui.js','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
+const CACHE='xiaofan-v25';
+const SHELL=['./','./index.html','./styles.css?v=25','./app.js?v=25','./adaptive-plan.js?v=25','./pantry.css?v=25','./onboarding.css?v=25','./api.css?v=25','./record-status.css?v=25','./adaptive-plan.css?v=25','./account-ui.js?v=25','./account.css?v=25','./guest.css?v=25','./guest-ui.js?v=25','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));

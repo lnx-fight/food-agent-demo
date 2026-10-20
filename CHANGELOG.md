@@ -24,7 +24,7 @@
 
 - 按澄清后的要求移除进入网站即强制登录的遮挡，新增可直接浏览、分类筛选和展开详情的公开发现页，展示餐食灵感、计划与记录、功能示例；点击营养查询、记餐、生成计划/食谱或对话才显示登录弹窗，支持关闭、继续浏览和 Esc 返回，并恢复原按钮焦点。
 - 访客不读取个人档案缓存、不请求个人业务接口，账号服务不可用时仍可浏览公开内容；有效会话加载本人状态后进入原产品。保留统一首次登录建号及全部业务 API 的会话校验，无需数据库迁移，已有账号和记录保留。公开卡片为静态示例，尚非用户发布的社区内容。
-- 主要文件：`index.html`、`guest.css`、`guest-ui.js`、`account-ui.js`、`account.css`、`app.js`、`public-files.mjs`、`sw.js`、`test/guest-auth.test.mjs`、`package.json` 和 README；更新资源白名单及 PWA 缓存。验证：105项Node/workerd回归、3项导入测试、30条评测结构校验及 Pages 构建通过；新增访客隔离、弹窗关闭、服务离线与有效会话恢复测试，并以隔离浏览器验证分类、详情展开、功能触发、Esc 返回及已有账号登录。
+- 主要文件：`index.html`、`guest.css`、`guest-ui.js`、`account-ui.js`、`account.css`、`app.js`、`public-files.mjs`、`sw.js`、`test/guest-auth.test.mjs`、`test/public-files.test.mjs`、`package.json` 和 README；更新资源白名单及 PWA 缓存，为页面脚本/样式增加版本参数并同步离线预缓存，避免旧浏览器缓存混用新页面与旧账号脚本导致按钮失效。验证：106项Node/workerd回归、3项导入测试、30条评测结构校验及 Pages 构建通过；新增访客隔离、弹窗关闭、服务离线与有效会话恢复测试，并以隔离浏览器验证分类、详情展开、功能触发、Esc 返回及已有账号登录。
 
 ## 2026-10-19
 
