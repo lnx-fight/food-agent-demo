@@ -3,6 +3,7 @@ import {env,isCloudflare} from './runtime.mjs';
 import {atomic} from './database.mjs';
 import {TFDA_TERMS,resolveAuthoritativeNutrition,authoritativeFoodDetails,NUTRITION_MANIFEST} from './nutrition-dataset.mjs';
 import {browseFoods,catalogCategories,catalogDetails,isPublicFoodRoute} from './food-catalog.mjs';
+import {browseRecipes,recipeDetails} from './recipe-library.mjs';
 import {
   readFileSync,
   existsSync,
@@ -68,6 +69,14 @@ function initDatabase(){
     }catch(error){db.exec('ROLLBACK');throw error}
   }
   db.exec(readFileSync(join(ROOT,'migrations/0006_usda_only.sql'),'utf8'));
+  const hasRecipeBatches=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='recipe_seed_batches'").get();
+  if(!hasRecipeBatches||!db.prepare('SELECT version FROM recipe_seed_batches WHERE version=?').get('home-2024-v1')){
+    db.exec('BEGIN');
+    try{
+      for(const file of ['0010_recipe_schema.sql','0011_home_recipes.sql'])db.exec(readFileSync(join(ROOT,'migrations',file),'utf8'));
+      db.exec('COMMIT');
+    }catch(error){db.exec('ROLLBACK');throw error}
+  }
 
 }
 function json(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data))}
@@ -367,7 +376,7 @@ async function api(req,res,url){
     if(url.pathname.endsWith('/details')){const result=await catalogDetails(db,url.searchParams.get('id'));return json(res,result?200:404,result?{ok:true,result}:{error:'当前数据库未收录此食品'});}
     return json(res,200,{ok:true,...await browseFoods(db,Object.fromEntries(url.searchParams))});
   }
-  if(req.method==='GET'&&url.pathname==='/api/health'){const count=await db.prepare('SELECT COUNT(*) count,SUM(nutrient_count) nutrient_rows FROM nutrition_foods').get();return json(res,200,{ok:true,services:{qwen:!!env.DASHSCOPE_API_KEY,tfda:true,usda:false,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'TFDA',foodCount:0,authoritativeFoodCount:count.count,nutrientRecordCount:count.nutrient_rows,datasetRelease:NUTRITION_MANIFEST.release})}
+  if(req.method==='GET'&&url.pathname==='/api/health'){const count=await db.prepare('SELECT COUNT(*) count,SUM(nutrient_count) nutrient_rows FROM nutrition_foods').get();const recipes=await db.prepare('SELECT COUNT(*) count FROM recipes').get();return json(res,200,{ok:true,recipeCount:recipes.count,services:{qwen:!!env.DASHSCOPE_API_KEY,tfda:true,usda:false,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'TFDA',foodCount:0,authoritativeFoodCount:count.count,nutrientRecordCount:count.nutrient_rows,datasetRelease:NUTRITION_MANIFEST.release})}
   if(req.method==='GET'&&url.pathname==='/api/nutrition/details'){const result=await authoritativeFoodDetails(db,url.searchParams.get('q'));return json(res,result?200:404,result?{ok:true,result}:{ok:false,error:'未找到食药署食品明细'})}
   if(req.method==='GET'&&['/api/nutrition/dataset-search','/api/nutrition/search','/api/nutrition/resolve'].includes(url.pathname)){
     const q=(url.searchParams.get('q')||'').trim();if(!q)return json(res,400,{error:'缺少q'});
@@ -404,6 +413,11 @@ async function api(req,res,url){
   }
   if(req.method==='POST'&&url.pathname==='/api/plans/weekly'){
     try{return json(res,200,{ok:true,result:buildNaturalWeekPlan(await body(req,800_000)),trace:['calculate_natural_week','read_confirmed_meals','preserve_locked_days','build_weekly_plan_proposal']})}catch(e){return json(res,e.status||400,{error:e.message})}
+  }
+  if(req.method==='GET'&&url.pathname==='/api/recipes')return json(res,200,{ok:true,...await browseRecipes(db,Object.fromEntries(url.searchParams))});
+  if(req.method==='GET'&&url.pathname==='/api/recipes/details'){
+    const recipe=await recipeDetails(db,url.searchParams.get('id'));
+    return json(res,recipe?200:404,recipe?{ok:true,recipe}:{error:'未找到此食谱'});
   }
   if(req.method==='POST'&&url.pathname==='/api/recipes/diy'){
     try{const result=await createDiyRecipe(await body(req,200_000));return json(res,200,{ok:true,result,trace:['tfda_nutrition_match',result.generatedBy==='qwen'?'qwen_recipe_plan':'rule_recipe_plan','server_nutrition_calculation']})}catch(e){return json(res,e.status||400,{error:e.message,unmatched:e.unmatched||[]})}

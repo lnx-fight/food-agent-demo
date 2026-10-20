@@ -250,6 +250,7 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 | `GET /api/nutrition/barcode/:code` | 已停用（410），可按包装标签手动输入 |
 | `POST /api/nutrition/web-search` | 已停用（410），统一使用食药署 |
 | `POST /api/meals/analyze` | 真实视觉识别并自动匹配食药署 |
+| `GET /api/recipes?q=`、`GET /api/recipes/details?id=home-001` | 直接读取D1预置家常菜，返回食材编号/克数、步骤及每道配方营养；不调用模型 |
 | `POST /api/recipes/diy` | 匹配现有食材、生成DIY食谱并由服务端计算营养 |
 | `POST /api/agent/chat` | 使用真实LLM结合用户状态和最近对话生成回答与受控动作 |
 | `GET /api/restaurants/nearby` | 定位坐标转换及高德周边POI |
@@ -274,3 +275,15 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 品牌头像采用浅绿底、深绿笑脸饭碗和嫩芽，应用于发现页、侧栏、建档页、浏览器标签和移动端主屏幕。内置 image_gen 生成的原图保存在 `assets/xiaofan-avatar.png`，完整提示词在 `assets/xiaofan-avatar-prompt.txt`；`npm run icons:build` 生成 512px/192px 图标、180px Apple touch icon、32px PNG favicon 和 16/32/48px ICO。公开资源由白名单控制，Service Worker 缓存版本同步升级。
 
 菜单完整条目仍保留；单次菜单的营养排序最多比较前12个符合偏好的条目，批量餐馆查询限制营养计算数量，未计算部分显示待确认，不编造热量。
+
+## 预置家常菜库
+
+现有 D1 新增独立的 `recipes`、`recipe_ingredients`、`recipe_seed_batches` 表，首批20道；不混入食药署原始食品表，也不修改个人记录。菜谱名单与来源字段见 `data/recipes/home-recipes.json`，说明见 [菜谱数据说明](data/recipes/README.md)。
+
+配料以指南原文的单道主料用量为底稿，补齐油盐、水量与步骤；每道一份菜，不代表完整一餐。食材映射到食药署编号，按生的可食部或加工品原状态计算整道配方的营养，未知值保持空值；尚未使用烹饪损失率、成品含水量或实测熟重，因此不提供成品每100克数据。来源、页码、原文、补充字段和计算口径只保存在库内，不在产品增加“参考官方指南整理”“按配方估算”文字。
+
+- `npm run recipes:build`：使用版本化TFDA快照重新生成 `0011_home_recipes.sql`。已发布迁移不得改写，后续配方调整应新增迁移。
+- `npm run recipes:check`：核对20道菜的食品编号、非空核心营养、克数和迁移一致性，CI发布前执行。
+- `0010_recipe_schema.sql` / `0011_home_recipes.sql`：新表与首批数据；本地启动会原子初始化一次，生产由现有CI使用cf执行D1迁移。
+
+本次提供入库和受现有浏览器会话保护的只读接口，没有新增页面菜谱栏目；现有DIY生成入口尚未自动检索这批菜谱，也未加入LLM生成后自动入库的缓存流程。

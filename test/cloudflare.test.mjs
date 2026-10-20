@@ -24,8 +24,9 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
       const statements=sqlStatements(sql);
       for(let i=0;i<statements.length;i+=40)await db.batch(statements.slice(i,i+40).map(sql=>db.prepare(sql)));
     }
-    const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,2213);
+    const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,2213);assert.equal(health.data.recipeCount,20);
     assert.equal((await call('/api/user/state')).status,401);
+    assert.equal((await call('/api/recipes')).status,401);
     const publicFoods=await call('/api/food-catalog?q='+encodeURIComponent('米饭')+'&category=all');assert.equal(publicFoods.status,200);assert.equal(publicFoods.data.foods[0].id,'tfda:A0550601');assert.equal(publicFoods.headers.get('set-cookie'),null);
     const publicCategories=await call('/api/food-catalog/categories');assert.equal(publicCategories.data.total,2213);
     const publicDetail=await call('/api/food-catalog/details?id=tfda:A0550601');assert.equal(publicDetail.status,200);assert.equal(publicDetail.data.result.nutrients.length,104);
@@ -34,6 +35,10 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     assert.equal(alice.status,201,JSON.stringify(alice.data));
     assert.match(alice.headers.get('set-cookie'),/Secure/);
     const cookie=alice.cookie;
+    const recipes=await call('/api/recipes',{cookie});assert.equal(recipes.status,200);assert.equal(recipes.data.total,20);
+    const recipe=await call('/api/recipes/details?id=home-001',{cookie});assert.equal(recipe.status,200);assert.equal(recipe.data.recipe.name,'西红柿炒蛋');assert.equal(recipe.data.recipe.ingredients.length,4);assert.equal(recipe.data.recipe.nutrition.kcal,120.87);
+    assert.equal((await call('/api/recipes/details?id=home-999',{cookie})).status,404);
+    assert.equal((await db.prepare('SELECT COUNT(*) n FROM recipe_ingredients i LEFT JOIN nutrition_foods f ON f.food_id=i.food_id WHERE f.food_id IS NULL').first()).n,0);
     const bob=await call('/api/device/session',{body:{}});
     assert.equal(bob.status,201,JSON.stringify(bob.data));
     const again=await call('/api/device/session',{body:{},cookie});assert.equal(again.status,200);assert.equal(again.data.device.id,alice.data.device.id);
@@ -61,6 +66,7 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     assert.equal((await call('/api/user/state',{method:'PUT',body:state,cookie,version:2,headers:{Origin:'https://evil.test'}})).status,403);
     assert.equal((await call('/server.mjs')).status,404);assert.equal((await call('/.env')).status,404);assert.equal((await call('/')).status,200);
     await mf.dispose();mf=new Miniflare(convertV4MiniflareOptions(options));
+    assert.equal((await call('/api/recipes',{cookie})).data.total,20);
     const restored=await call('/api/user/state',{cookie});
     assert.equal(restored.status,200);assert.equal(restored.data.stateVersion,2);assert.equal(restored.data.state.mealLogs.length,1);
     const cleared=await call('/api/device/clear',{cookie,body:{confirmation:'清空数据'}});

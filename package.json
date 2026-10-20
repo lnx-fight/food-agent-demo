@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check app.js && node --check adaptive-plan.js && node --check server.mjs && node --check accounts.mjs && node --check account-ui.js && node --check guest-ui.js && node --check food-catalog.js && node --check food-catalog.mjs && node --check public-files.mjs && node --check nutrition-dataset.mjs && node --check nutrition-names.mjs && node --check scripts/tfda-labels.mjs && node --check cloudflare/worker.mjs && node --check scripts/deploy-pages.mjs && node --check scripts/migrate-d1.mjs",
+    "check": "node --check app.js && node --check adaptive-plan.js && node --check server.mjs && node --check accounts.mjs && node --check account-ui.js && node --check guest-ui.js && node --check food-catalog.js && node --check food-catalog.mjs && node --check public-files.mjs && node --check nutrition-dataset.mjs && node --check nutrition-names.mjs && node --check recipe-library.mjs && node --check scripts/build-recipe-seed.mjs && node --check scripts/tfda-labels.mjs && node --check cloudflare/worker.mjs && node --check scripts/deploy-pages.mjs && node --check scripts/migrate-d1.mjs",
     "test": "NODE_ENV=test DASHSCOPE_API_KEY= USDA_API_KEY= AMAP_WEB_SERVICE_KEY= node --test --test-concurrency=1",
     "eval:validate": "NODE_ENV=test AGENT_EVAL_VALIDATE_ONLY=1 node scripts/agent-behavior-eval.mjs",
     "eval:agent": "NODE_ENV=test node scripts/agent-behavior-eval.mjs",
@@ -16,6 +16,8 @@
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "db:migrate": "node scripts/migrate-d1.mjs",
     "data:download": "python3 scripts/import-tfda.py",
+    "recipes:build": "node scripts/build-recipe-seed.mjs",
+    "recipes:check": "node scripts/build-recipe-seed.mjs --check",
     "test:dataset": "python3 test/tfda_import_test.py",
     "icons:build": "node scripts/build-icons.mjs"
   },

@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm run recipes:check
       - run: npm test
       - run: npm run test:dataset
       - run: npm run eval:validate

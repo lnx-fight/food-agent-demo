@@ -1,0 +1,1102 @@
+{
+  "version": "home-2024-v1",
+  "sourceTitle": "成人肥胖食养指南（2024年版）",
+  "publisher": "国家卫生健康委办公厅",
+  "sourceUrl": "https://wjw.baoji.gov.cn/col2223/col2269/202403/P020241228641521653546.pdf",
+  "sourceSha256": "ce7e43937883f2d89bb3b505a410d023df510027e2015457d2800e98f5a330a2",
+  "retrievedOn": "2026-10-20",
+  "nutritionSource": "TFDA",
+  "recipes": [
+    {
+      "id": "home-001",
+      "name": "西红柿炒蛋",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 12,
+      "waterMl": 0,
+      "allergens": [
+        "鸡蛋",
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "鸡蛋",
+          "foodId": "K01001",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "西红柿",
+          "foodId": "E7400102",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "西红柿洗净切块，鸡蛋去壳称重后打散。",
+        "锅中加入大豆油，倒入蛋液炒至凝固后盛出。",
+        "用锅中剩余的油炒软西红柿，加入鸡蛋和岩盐翻炒至熟。"
+      ],
+      "provenance": {
+        "printedPage": 29,
+        "pdfPage": 31,
+        "excerpt": "西红柿炒蛋（鸡蛋 50g，西红柿 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-002",
+      "name": "蒜蓉西兰花",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 10,
+      "waterMl": 0,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "西兰花",
+          "foodId": "E5800402",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大蒜",
+          "foodId": "E2100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "西兰花洗净切小朵，大蒜切末。",
+        "西兰花放入沸水中焯至断生，捞出沥水。",
+        "锅中加入大豆油炒香蒜末，放入西兰花和岩盐翻炒至熟。"
+      ],
+      "provenance": {
+        "printedPage": 25,
+        "pdfPage": 27,
+        "excerpt": "蒜蓉西兰花（西兰花 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-003",
+      "name": "清蒸鲈鱼",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 18,
+      "waterMl": 0,
+      "allergens": [
+        "鱼"
+      ],
+      "ingredients": [
+        {
+          "name": "鲈鱼肉",
+          "foodId": "J04044",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "生姜",
+          "foodId": "E1900103",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "将去鳞、去内脏及骨刺的鲈鱼肉洗净，生姜切丝。",
+        "鱼肉放入蒸盘，均匀撒上姜丝和岩盐。",
+        "水沸后入锅蒸约10分钟，按鱼块厚度延长时间，确认鱼肉完全熟透后食用。"
+      ],
+      "provenance": {
+        "printedPage": 24,
+        "pdfPage": 26,
+        "excerpt": "清蒸鲈鱼（鲈鱼 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-004",
+      "name": "小葱拌豆腐",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 8,
+      "waterMl": 0,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "嫩豆腐",
+          "foodId": "R4701201",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "as_sold"
+        },
+        {
+          "name": "小葱",
+          "foodId": "E23001",
+          "grams": 20,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "嫩豆腐切块，小葱洗净切碎。",
+        "豆腐放入沸水中加热透，沥水后放凉。",
+        "加入小葱和岩盐轻轻拌匀，现做现吃。"
+      ],
+      "provenance": {
+        "printedPage": 26,
+        "pdfPage": 28,
+        "excerpt": "小葱拌豆腐（嫩豆腐 50g，香葱 20g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-005",
+      "name": "香菇炒青菜",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 12,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "小白菜",
+          "foodId": "E3200601",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "鲜香菇",
+          "foodId": "G08001",
+          "grams": 20,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "小白菜洗净切段，鲜香菇洗净切片。",
+        "锅中加入大豆油，先炒香菇，再加入菜梗翻炒。",
+        "加入菜叶、15毫升水和岩盐，炒至蔬菜完全熟透。"
+      ],
+      "provenance": {
+        "printedPage": 26,
+        "pdfPage": 28,
+        "excerpt": "香菇炒青菜（小青菜 100g，香菇【鲜】20g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-006",
+      "name": "清炒芹菜",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 8,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "芹菜",
+          "foodId": "E37002",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "芹菜去根和老叶，洗净切段。",
+        "锅中加入大豆油，放入芹菜翻炒。",
+        "加入15毫升水和岩盐，炒至断生熟透后盛出。"
+      ],
+      "provenance": {
+        "printedPage": 26,
+        "pdfPage": 28,
+        "excerpt": "清炒芹菜（芹菜 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-007",
+      "name": "凉拌黄瓜",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 5,
+      "waterMl": 0,
+      "allergens": [],
+      "ingredients": [
+        {
+          "name": "黄瓜",
+          "foodId": "E6400301",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大蒜",
+          "foodId": "E2100101",
+          "grams": 2,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "糯米醋",
+          "foodId": "P0600201",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "黄瓜充分洗净去蒂，拍裂后切段，大蒜切末。",
+        "加入蒜末、糯米醋和岩盐。",
+        "充分拌匀后立即食用。"
+      ],
+      "provenance": {
+        "printedPage": 29,
+        "pdfPage": 31,
+        "excerpt": "凉拌黄瓜（黄瓜 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-008",
+      "name": "芹菜炒香干",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 12,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "芹菜",
+          "foodId": "E37002",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "香干",
+          "foodId": "R4700202",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "as_sold"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "芹菜洗净切段，香干切条。",
+        "锅中加入大豆油，放入香干翻炒。",
+        "加入芹菜、15毫升水和岩盐，翻炒至食材熟透。"
+      ],
+      "provenance": {
+        "printedPage": 30,
+        "pdfPage": 32,
+        "excerpt": "芹菜炒香干（芹菜 100g，豆腐干 50g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-009",
+      "name": "西兰花炒肉",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 15,
+      "waterMl": 20,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "西兰花",
+          "foodId": "E5800402",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "猪后腿瘦肉",
+          "foodId": "I0302301",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "西兰花洗净切小朵，猪瘦肉切薄片，生熟食材分开处理。",
+        "西兰花用沸水焯至断生，捞出沥水。",
+        "锅中加入大豆油，将肉片炒熟，再加入西兰花、20毫升水和岩盐炒至全熟。"
+      ],
+      "provenance": {
+        "printedPage": 28,
+        "pdfPage": 30,
+        "excerpt": "西兰花炒肉（西兰花 100g，猪瘦肉 50g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-010",
+      "name": "西葫芦炒肉",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 15,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "西葫芦",
+          "foodId": "E7100201",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "猪后腿瘦肉",
+          "foodId": "I0302301",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "西葫芦洗净切片，猪瘦肉切薄片，生熟食材分开处理。",
+        "锅中加入大豆油，先将肉片炒熟。",
+        "加入西葫芦、15毫升水和岩盐，翻炒至食材完全熟透。"
+      ],
+      "provenance": {
+        "printedPage": 27,
+        "pdfPage": 29,
+        "excerpt": "西葫芦炒肉（西葫芦 100g，猪瘦肉 50g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-011",
+      "name": "红烧牛肉",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 70,
+      "waterMl": 300,
+      "allergens": [
+        "大豆",
+        "小麦"
+      ],
+      "ingredients": [
+        {
+          "name": "瘦牛肉",
+          "foodId": "I0104201",
+          "grams": 60,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "胡萝卜",
+          "foodId": "E02001",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "土豆",
+          "foodId": "B0700201",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "生姜",
+          "foodId": "E1900103",
+          "grams": 2,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "淡色酱油",
+          "foodId": "P0700401",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "牛肉切小块，胡萝卜和土豆去皮切块，生姜切片。",
+        "牛肉入冷水锅焯煮后捞出，锅中放大豆油和姜片，加入牛肉翻炒。",
+        "加入淡色酱油和300毫升水，烧开后小火炖约40分钟，水少时补充开水。",
+        "加入胡萝卜和土豆，继续炖约20分钟，确认牛肉熟透、蔬菜软熟后出锅。"
+      ],
+      "provenance": {
+        "printedPage": 26,
+        "pdfPage": 28,
+        "excerpt": "红烧牛肉（牛瘦肉 60g，胡萝卜 100g，土豆 100g，生姜*2g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-012",
+      "name": "醋熘白菜",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 10,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "大白菜",
+          "foodId": "E33001",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "糯米醋",
+          "foodId": "P0600201",
+          "grams": 4,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "大白菜洗净，菜帮和菜叶分别切块。",
+        "锅中加入大豆油，先炒菜帮，再放入菜叶和15毫升水。",
+        "白菜炒熟后加入糯米醋和岩盐，翻炒均匀出锅。"
+      ],
+      "provenance": {
+        "printedPage": 30,
+        "pdfPage": 32,
+        "excerpt": "醋熘白菜（白菜 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-013",
+      "name": "清炒豆芽",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 10,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "绿豆芽",
+          "foodId": "E7700701",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "绿豆芽挑去腐烂部分，充分冲洗。",
+        "锅中加入大豆油，放入豆芽翻炒。",
+        "加入15毫升水和岩盐，持续加热至豆芽彻底熟透后盛出。"
+      ],
+      "provenance": {
+        "printedPage": 31,
+        "pdfPage": 33,
+        "excerpt": "清炒豆芽（绿豆芽 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-014",
+      "name": "山药香菇汤",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 20,
+      "waterMl": 300,
+      "allergens": [],
+      "ingredients": [
+        {
+          "name": "鲜山药",
+          "foodId": "B01002",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "西红柿",
+          "foodId": "E7400102",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "鲜香菇",
+          "foodId": "G08001",
+          "grams": 30,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "山药去皮切块，西红柿切块，鲜香菇切片。",
+        "锅中加入300毫升水，烧开后放入山药和鲜香菇。",
+        "煮约10分钟后加入西红柿，继续煮至全部食材软熟，加入岩盐拌匀。"
+      ],
+      "provenance": {
+        "printedPage": 24,
+        "pdfPage": 26,
+        "excerpt": "山药香菇汤（鲜山药*50g，西红柿 50g，香菇【鲜】30g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-015",
+      "name": "青椒西葫芦",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 10,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "西葫芦",
+          "foodId": "E7100201",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "青椒",
+          "foodId": "E75001",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "西葫芦洗净切片，青椒去蒂去籽切块。",
+        "锅中加入大豆油，放入西葫芦和青椒翻炒。",
+        "加入15毫升水和岩盐，炒至食材熟透后盛出。"
+      ],
+      "provenance": {
+        "printedPage": 24,
+        "pdfPage": 26,
+        "excerpt": "青椒西葫芦（西葫芦 50g，柿子椒 100g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-016",
+      "name": "韭菜炒豆芽",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 12,
+      "waterMl": 20,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "黄豆芽",
+          "foodId": "E7700401",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "韭菜",
+          "foodId": "E2600201",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.5,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "黄豆芽去除腐烂部分洗净，韭菜洗净切段。",
+        "锅中加入大豆油，放入黄豆芽和20毫升水，加热至豆芽彻底熟透。",
+        "加入韭菜和岩盐继续翻炒至熟，盛出食用。"
+      ],
+      "provenance": {
+        "printedPage": 24,
+        "pdfPage": 26,
+        "excerpt": "韭菜炒豆芽（黄豆芽 100g，韭菜 50g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-017",
+      "name": "芝麻菠菜",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 10,
+      "waterMl": 0,
+      "allergens": [
+        "芝麻"
+      ],
+      "ingredients": [
+        {
+          "name": "菠菜",
+          "foodId": "E5000101",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "白芝麻",
+          "foodId": "C1605101",
+          "grams": 10,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "白芝麻用干净平底锅小火炒熟，盛出放凉。",
+        "菠菜去根洗净，放入沸水中焯熟，捞出沥水切段。",
+        "菠菜加入炒熟的芝麻和岩盐拌匀，现做现吃。"
+      ],
+      "provenance": {
+        "printedPage": 24,
+        "pdfPage": 26,
+        "excerpt": "芝麻菠菜（菠菜 50g，白芝麻 10g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-018",
+      "name": "清蒸虾仁",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 15,
+      "waterMl": 0,
+      "allergens": [
+        "甲壳类"
+      ],
+      "ingredients": [
+        {
+          "name": "冷冻大头虾仁",
+          "foodId": "J2200101",
+          "grams": 70,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "生姜",
+          "foodId": "E1900103",
+          "grams": 2,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "冷冻虾仁在冷藏条件下解冻，清洗后去除虾线，生姜切丝。",
+        "虾仁放入蒸盘，加入姜丝和岩盐。",
+        "水沸后入锅蒸约8分钟，按虾仁大小延长时间，确认内部完全熟透后食用。"
+      ],
+      "provenance": {
+        "printedPage": 30,
+        "pdfPage": 32,
+        "excerpt": "清蒸虾仁（冻虾仁 70g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-019",
+      "name": "豆干炒西兰花",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 12,
+      "waterMl": 15,
+      "allergens": [
+        "大豆"
+      ],
+      "ingredients": [
+        {
+          "name": "西兰花",
+          "foodId": "E5800402",
+          "grams": 100,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "豆干",
+          "foodId": "R4700203",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "as_sold"
+        },
+        {
+          "name": "大豆油",
+          "foodId": "M1100101",
+          "grams": 3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "西兰花洗净切小朵，豆干切条。",
+        "西兰花用沸水焯至断生，捞出沥水。",
+        "锅中加入大豆油，先炒豆干，再加入西兰花、15毫升水和岩盐翻炒至熟。"
+      ],
+      "provenance": {
+        "printedPage": 29,
+        "pdfPage": 31,
+        "excerpt": "豆干炒西兰花（西兰花 100g，豆腐干 50g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    },
+    {
+      "id": "home-020",
+      "name": "鸡蛋羹",
+      "servings": 1,
+      "portionType": "dish",
+      "minutes": 15,
+      "waterMl": 75,
+      "allergens": [
+        "鸡蛋"
+      ],
+      "ingredients": [
+        {
+          "name": "鸡蛋",
+          "foodId": "K01001",
+          "grams": 50,
+          "role": "main",
+          "quantityOrigin": "source",
+          "state": "raw_edible"
+        },
+        {
+          "name": "岩盐",
+          "foodId": "P0300101",
+          "grams": 0.3,
+          "role": "seasoning",
+          "quantityOrigin": "editorial",
+          "state": "as_sold"
+        }
+      ],
+      "steps": [
+        "鸡蛋去壳称重后打散，加入75毫升温水和岩盐搅匀。",
+        "蛋液倒入耐热碗，盖上耐热盖，放入已经上汽的蒸锅。",
+        "中小火蒸约12分钟，确认中心完全凝固、熟透后食用。"
+      ],
+      "provenance": {
+        "printedPage": 26,
+        "pdfPage": 28,
+        "excerpt": "鸡蛋羹（鸡蛋 50g）",
+        "changes": "保留原文主料用量；补充单菜调料克数、水量和制作步骤；食材按现有TFDA样品匹配。",
+        "matchNotes": "青菜选小白菜，牛瘦肉选修清前胸肉，鲈鱼选日本花鲈去皮可食肉，香干选五香豆干，盐选岩盐；使用对应样品估算。"
+      }
+    }
+  ]
+}
