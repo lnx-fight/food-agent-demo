@@ -14,3 +14,5 @@
 @media(max-width:600px){.auth-card{padding:26px}.account-overlay{padding:10px}.account-card{padding:22px;max-height:95dvh}.account-actions button{flex:1}.auth-gate{padding:16px}}
 
 .auth-brand{display:flex;align-items:center;gap:12px}.auth-brand img{display:block;flex:none;border-radius:13px}
+
+.auth-card .auth-first-login{margin:0;padding:10px 12px;background:#eff6ee;border-radius:10px;color:#1d6b55}

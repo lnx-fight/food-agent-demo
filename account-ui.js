@@ -1,6 +1,6 @@
 // 账号界面只持有公开账号信息；登录凭证仅保存在 HttpOnly Cookie 中。
 window.XiaofanAccount=(()=>{
-  let bridge,currentAccount,mode='login',expiring=false,returnFocus;
+  let bridge,currentAccount,expiring=false,returnFocus;
   const el=id=>document.getElementById(id);
   function message(value){el('accountMessage').textContent=value;el('accountPanelMessage').textContent=value}
   async function request(path,body){
@@ -42,12 +42,9 @@ window.XiaofanAccount=(()=>{
       bridge.ready(currentAccount,remote);
     }catch(error){el('authLoading').textContent=`无法连接账号服务：${error.message}`;el('authRetry').hidden=false}
   }
-  el('authMode').onclick=()=>{
-    mode=mode==='login'?'register':'login';el('authTitle').textContent=mode==='login'?'欢迎回到小饭':'创建小饭账号';el('authSubmit').textContent=mode==='login'?'登录':'注册并开始';el('authMode').textContent=mode==='login'?'还没有账号？立即注册':'已有账号？返回登录';el('authPassword').autocomplete=mode==='login'?'current-password':'new-password';el('authError').textContent='';
-  };
   el('authForm').onsubmit=async event=>{
     event.preventDefault();const button=el('authSubmit');button.disabled=true;el('authError').textContent='';
-    try{await request(`/api/auth/${mode}`,{username:el('authUsername').value,password:el('authPassword').value});el('authPassword').value='';location.reload()}catch(error){el('authError').textContent=error.message}finally{button.disabled=false}
+    try{await request('/api/auth/login',{username:el('authUsername').value,password:el('authPassword').value});el('authPassword').value='';location.reload()}catch(error){el('authError').textContent=error.message}finally{button.disabled=false}
   };
   el('authRetry').onclick=()=>location.reload();
   el('legacyLogout').onclick=()=>busy(el('legacyLogout'),async()=>{await request('/api/auth/logout',{});location.reload()});

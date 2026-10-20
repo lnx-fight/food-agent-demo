@@ -29,15 +29,16 @@
 <body class="account-loading">
   <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
     <div class="auth-card">
-      <div class="auth-brand"><img src="xiaofan-icon.png" width="44" height="44" alt="" />小饭</div><h1 id="authTitle">欢迎回到小饭</h1>
+      <div class="auth-brand"><img src="xiaofan-icon.png" width="44" height="44" alt="" />小饭</div><h1 id="authTitle">登录小饭</h1>
       <p>让每一顿都更适合你。登录后，在不同设备继续使用自己的计划和记录。</p>
       <p id="authLoading" role="status">正在连接账号服务…</p><button id="authRetry" class="secondary-btn" hidden>重新连接</button>
       <form id="authForm" hidden>
+        <p class="auth-first-login">首次登录将自动创建账号，无需单独注册。</p>
         <label>用户名<input id="authUsername" name="username" autocomplete="username" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="3–32位字母、数字或下划线" required></label>
         <label>密码<input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" placeholder="至少12个字符" required></label>
         <div id="authError" class="account-error" role="alert"></div>
-        <button id="authSubmit" class="primary-btn full" type="submit">登录</button><button id="authMode" class="account-link" type="button">还没有账号？立即注册</button>
-        <p>请妥善保存用户名和密码。当前尚不支持邮件找回密码。</p>
+        <button id="authSubmit" class="primary-btn full" type="submit">登录并开始使用</button>
+        <p>请记住用户名和密码，下次登录时继续使用。暂不支持邮件找回密码。</p>
       </form>
       <div id="legacyChoice" hidden><h2>导入本机旧记录？</h2><p>此浏览器保存了一份旧版小饭档案。仅当这些记录属于你时，才将它们导入当前账号；导入不会读取其他设备的旧数据。</p><button id="importLegacyBtn" class="primary-btn full">这些是我的记录，导入账号</button><button id="skipLegacyBtn" class="account-link">从新档案开始</button><button id="legacyLogout" class="account-link">退出当前账号</button></div>
       <p id="accountMessage" class="account-message" role="status"></p>

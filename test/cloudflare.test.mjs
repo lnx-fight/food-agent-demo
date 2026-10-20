@@ -27,13 +27,14 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     }
     const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,13588);
     assert.equal((await call('/api/user/state')).status,401);
-    const alice=await call('/api/auth/register',{body:{username:'alice',password}});
+    const alice=await call('/api/auth/login',{body:{username:'alice',password}});
     assert.equal(alice.status,201,JSON.stringify(alice.data));
     assert.match(alice.headers.get('set-cookie'),/Secure/);
     const cookie=alice.cookie;
     const bob=await call('/api/auth/register',{body:{username:'bob',password}});
     assert.equal(bob.status,201,JSON.stringify(bob.data));
-    assert.equal((await call('/api/auth/login',{body:{username:'missing',password}})).status,401);
+    const again=await call('/api/auth/login',{body:{username:'alice',password}});assert.equal(again.status,200);assert.equal(again.data.account.id,alice.data.account.id);
+    const race=await Promise.all([password,password+'other'].map(value=>call('/api/auth/login',{body:{username:'first_signin',password:value}})));assert.deepEqual(race.map(item=>item.status).sort(),[201,401]);assert.equal((await db.prepare("SELECT COUNT(*) n FROM accounts WHERE username='first_signin'").first()).n,1);
     assert.equal((await call('/api/auth/login',{body:{username:'alice',password:'wrong password'}})).status,401);
     const dataset=await call('/api/nutrition/dataset-search?q=rice%20cooked',{cookie});assert.equal(dataset.status,200);assert.ok(dataset.data.results.length>0);
     const burger=await call('/api/nutrition/search?q='+encodeURIComponent('汉堡'),{cookie});assert.equal(burger.status,200);assert.equal(burger.data.result.id,'fdc:2706920');assert.equal(burger.data.needsClarification,false);assert.deepEqual(burger.data.candidates,[]);

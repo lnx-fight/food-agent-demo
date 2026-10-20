@@ -17,9 +17,10 @@ const state = {
   ingredients: ['鸡胸肉','番茄','鸡蛋','米饭']
 };
 
-// GitHub Pages 无法运行 Node.js 服务端。部署到 github.io（或本地带 ?demo=1 预览）时，
+// GitHub Pages 无法运行 Node.js 服务端。仅独立的 github.io 静态演示站使用预置响应；正式产品始终要求登录，
 // 仅使用明确标注的预置演示响应，真实服务端部署保持原有 API 行为。
-const DEMO_MODE=location.hostname.endsWith('.github.io')||new URLSearchParams(location.search).has('demo');
+// The production product always requires a session; URL flags cannot bypass sign-in.
+const DEMO_MODE=location.hostname.endsWith('.github.io');
 
 let STORAGE_KEY = 'fitpilot_user_v3';
 let accountReady=DEMO_MODE,accountVersion=0,syncPaused=false,syncInFlight=null,agentEventSource=null;

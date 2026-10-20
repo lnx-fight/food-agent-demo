@@ -105,20 +105,24 @@ export function createAccounts({db,json,readBody,getState,saveState,closeEvents=
       const b=await readBody(req,8000),username=String(b.username||'').trim().toLowerCase();
       (await rate(req,username));
       if(!/^[a-z0-9_]{3,32}$/.test(username)||!passwordValid(b.password))throw fail(400,'用户名需为3–32位字母、数字或下划线，密码需为12–128个字符');
-      if(path.endsWith('/register')){
-        const encoded=await passwordWork(async ()=>(await passwordHash(b.password)));
-        if((await db.prepare('SELECT id FROM accounts WHERE username=?').get(username)))throw fail(409,'该用户名不可用，请更换');
-        const id=randomUUID(),clientId=randomUUID();
-        (await db.prepare('INSERT INTO accounts(id,username,password_hash,client_id,created_at) VALUES(?,?,?,?,?)').run(id,username,encoded,clientId,new Date().toISOString()));
-        (await issue(res,id));return json(res,201,{ok:true,account:publicAccount((await account(id)))});
+      let row=await db.prepare('SELECT * FROM accounts WHERE username=?').get(username);
+      if(!row){
+        const encoded=await passwordWork(()=>passwordHash(b.password)),id=randomUUID(),clientId=randomUUID();
+        // A simultaneous first sign-in must not replace the winner's password or identity.
+        const inserted=await db.prepare('INSERT INTO accounts(id,username,password_hash,client_id,created_at) VALUES(?,?,?,?,?) ON CONFLICT(username) DO NOTHING').run(id,username,encoded,clientId,new Date().toISOString());
+        if(inserted.changes){
+          await issue(res,id);return json(res,201,{ok:true,created:true,account:publicAccount(await account(id))});
+        }
+        row=await db.prepare('SELECT * FROM accounts WHERE username=?').get(username);
       }
-      const row=(await db.prepare('SELECT * FROM accounts WHERE username=?').get(username));
-      const encoded=row?.password_hash||(isCloudflare?`pbkdf2-sha256:100000:${'0'.repeat(32)}:${'0'.repeat(64)}`:`${'0'.repeat(32)}:${'0'.repeat(128)}`);
+      if(path.endsWith('/register'))throw fail(409,'该用户名不可用，请更换');
+      if(!row)throw fail(401,'账号状态已改变，请重新登录');
+      const encoded=row.password_hash;
       const matched=await passwordWork(async ()=>(await passwordMatches(b.password,encoded)));
       if(!row||!matched)throw fail(401,'用户名或密码不正确');
       // 密码校验期间账号可能被另一会话修改或注销。
       if((await account(row.id))?.password_hash!==encoded)throw fail(401,'账号状态已改变，请重新登录');
-      (await issue(res,row.id));return json(res,200,{ok:true,account:publicAccount(row)});
+      (await issue(res,row.id));return json(res,200,{ok:true,created:false,account:publicAccount(row)});
     }
     const row=(await session(req));if(!row)throw fail(401,'请先登录');
     if(path==='/api/auth/logout'&&req.method==='POST'){
