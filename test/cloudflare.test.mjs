@@ -9,7 +9,8 @@ import {sqlStatements} from '../scripts/sql-statements.mjs';
 
 test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化和资源隔离',async t=>{
   const persist=await mkdtemp(join(tmpdir(),'xiaofan-d1-'));
-  const options={modules:true,scriptPath:new URL('../dist/_worker.js',import.meta.url).pathname,compatibilityDate:'2026-10-16',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'test-db'},resourcePersistencePath:persist,bindings:{DASHSCOPE_API_KEY:'test-key'},outboundService:()=>Response.json({data:[{embedding:[1,0,0]}],choices:[{message:{content:JSON.stringify({answer:'营养查询已完成',intent:'nutrition',action:{type:'none'}})}}]}),serviceBindings:{ASSETS:()=>new Response('public asset')}};
+  let recipeModelCalls=0;
+  const options={modules:true,scriptPath:new URL('../dist/_worker.js',import.meta.url).pathname,compatibilityDate:'2026-10-16',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'test-db'},resourcePersistencePath:persist,bindings:{DASHSCOPE_API_KEY:'test-key'},outboundService:async request=>{const payload=await request.json();if(JSON.stringify(payload.messages||[]).includes('根据以下真实可用食材')){recipeModelCalls++;return Response.json({choices:[{message:{content:JSON.stringify({name:'番茄鸡胸肉',ingredients:[{name:'去皮清肉平均值',grams:recipeModelCalls===1?150:180},{name:'红番茄',grams:150}],steps:['将去皮清肉平均值切片，红番茄切块。','锅中加入水，放入去皮清肉平均值和红番茄加热至鸡肉全熟。'],minutes:15,waterMl:30})}}]})}return Response.json({data:[{embedding:[1,0,0]}],choices:[{message:{content:JSON.stringify({answer:'营养查询已完成',intent:'nutrition',action:{type:'none'}})}}]})},serviceBindings:{ASSETS:()=>new Response('public asset')}};
   let mf=new Miniflare(convertV4MiniflareOptions(options));
   async function call(path,{method,body,cookie,version,headers={}}={}){
     const response=await mf.dispatchFetch('https://xiaofan.test'+path,{method:method||(body===undefined?'GET':'POST'),headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan',...(cookie?{Cookie:cookie}:{}),...(version===undefined?{}:{'X-State-Version':String(version)}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
@@ -39,6 +40,17 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     const recipe=await call('/api/recipes/details?id=home-001',{cookie});assert.equal(recipe.status,200);assert.equal(recipe.data.recipe.name,'西红柿炒蛋');assert.equal(recipe.data.recipe.ingredients.length,4);assert.equal(recipe.data.recipe.nutrition.kcal,120.87);
     assert.equal((await call('/api/recipes/details?id=home-999',{cookie})).status,404);
     assert.equal((await db.prepare('SELECT COUNT(*) n FROM recipe_ingredients i LEFT JOIN nutrition_foods f ON f.food_id=i.food_id WHERE f.food_id IS NULL').first()).n,0);
+    const diyInput={ingredients:['鸡胸肉','番茄'],pantry:[],cookTime:'20分钟',cookTools:'炒锅 + 电饭煲',mealType:'午餐',profile:{tastePreference:'不辣'},today:{}};
+    const seedHit=await call('/api/recipes/diy',{cookie,body:{...diyInput,ingredients:['鸡蛋','番茄'],pantry:['食用植物油','食盐']}});assert.equal(seedHit.status,200);assert.equal(seedHit.data.result.generatedBy,'library');assert.equal(seedHit.data.result.recipe.id,'home-001');
+    const concurrent=await Promise.all([call('/api/recipes/diy',{cookie,body:diyInput}),call('/api/recipes/diy',{cookie,body:diyInput})]);
+    for(const response of concurrent){assert.equal(response.status,200,JSON.stringify(response.data));assert.ok(['qwen','library'].includes(response.data.result.generatedBy));}
+    const reused=await call('/api/recipes/diy',{cookie,body:diyInput});assert.equal(reused.status,200);assert.equal(reused.data.result.generatedBy,'library');
+    const generatedRecipeId=reused.data.result.recipe.id;
+    for(const response of concurrent)assert.deepEqual(response.data.result.recipe.ingredients.map(item=>[item.foodId,item.grams]),reused.data.result.recipe.ingredients.map(item=>[item.foodId,item.grams]));
+    assert.equal((await db.prepare("SELECT COUNT(*) n FROM recipes WHERE origin='llm'").first()).n,1);
+    assert.equal((await db.prepare('SELECT COUNT(*) n FROM recipe_ingredients WHERE recipe_id=?').bind(generatedRecipeId).first()).n,2);
+    assert.equal((await call('/api/recipes/details?id='+generatedRecipeId,{cookie})).data.recipe.name,'番茄鸡胸肉');
+    assert.equal((await call('/api/health')).data.seedRecipeCount,20);
     const bob=await call('/api/device/session',{body:{}});
     assert.equal(bob.status,201,JSON.stringify(bob.data));
     const again=await call('/api/device/session',{body:{},cookie});assert.equal(again.status,200);assert.equal(again.data.device.id,alice.data.device.id);
@@ -66,7 +78,8 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     assert.equal((await call('/api/user/state',{method:'PUT',body:state,cookie,version:2,headers:{Origin:'https://evil.test'}})).status,403);
     assert.equal((await call('/server.mjs')).status,404);assert.equal((await call('/.env')).status,404);assert.equal((await call('/')).status,200);
     await mf.dispose();mf=new Miniflare(convertV4MiniflareOptions(options));
-    assert.equal((await call('/api/recipes',{cookie})).data.total,20);
+    assert.equal((await call('/api/recipes',{cookie})).data.total,21);
+    assert.equal((await call('/api/recipes/diy',{cookie,body:diyInput})).data.result.recipe.id,generatedRecipeId);
     const restored=await call('/api/user/state',{cookie});
     assert.equal(restored.status,200);assert.equal(restored.data.stateVersion,2);assert.equal(restored.data.state.mealLogs.length,1);
     const cleared=await call('/api/device/clear',{cookie,body:{confirmation:'清空数据'}});
