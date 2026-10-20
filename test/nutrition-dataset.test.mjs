@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {authoritativeFood,searchAuthoritativeFoods,authoritativeFoodDetails,resolveAuthoritativeNutrition,NUTRITION_MANIFEST as manifest} from '../nutrition-dataset.mjs';
+import {normalizeAuthoritativeFood,authoritativeFood,searchAuthoritativeFoods,authoritativeFoodDetails,resolveAuthoritativeNutrition,NUTRITION_MANIFEST as manifest} from '../nutrition-dataset.mjs';
 import {simplifyChinese} from '../nutrition-names.mjs';
 
 const db=new DatabaseSync(':memory:');
@@ -24,6 +24,7 @@ test('精确编号读取只返回食药署数据，保留原名、授权及能�
   assert.equal(result.per100g.kcal,182);assert.equal(result.per100g.protein,3.1);assert.equal(result.energyBasis,'修正熱量');
   assert.equal(result.basis,'per100g');assert.equal(result.source.id,'A0550601');assert.equal(result.source.code,'TFDA');assert.equal(result.source.licenseUrl,'https://data.gov.tw/license');assert.match(result.source.attribution,/食品药物管理署/);
   assert.equal(result.originalName,'白飯');assert.equal((await authoritativeFood(db,result.name)).id,result.id);
+  assert.equal(result.energyBasisLabel,'修正热量');
   assert.equal(await authoritativeFood(db,'fdc:168878'),null);
 });
 
@@ -45,12 +46,24 @@ test('整菜不得误匹配单个食材、调味酱、冷冻肉饼或汉堡面�
   const removed=await resolveAuthoritativeNutrition(db,'fdc:168878');assert.equal(removed.nutrition,null);assert.match(removed.question,/USDA 数据已移除/);
 });
 
+test('全部食品的名称、样品说明和能量显示口径为简体，原始口径保留',()=>{
+  for(const row of db.prepare('SELECT * FROM nutrition_foods').all()){
+    const food=normalizeAuthoritativeFood(row);
+    assert.equal(food.name,simplifyChinese(row.original_name),food.id);
+    assert.equal(food.description,simplifyChinese(row.original_description),food.id);
+    assert.equal(food.energyBasisLabel,simplifyChinese(row.energy_basis||''),food.id);
+    assert.equal(food.energyBasis,row.energy_basis);
+    assert.equal(food.per100g.kcal,row.kcal);
+  }
+});
+
 test('完整营养指标保留原始数值、单位、零和缺失，查询默认摘要不加载明细',async()=>{
   const result=await authoritativeFoodDetails(db,'tfda:R5500201');
   assert.equal(result.records.length,result.food.nutrientCount);assert.equal(result.records.length,104);
   assert.equal(result.records.find(row=>row[1]==='膳食纖維')[3],'');assert.equal(result.food.per100g.fiber,null);
   assert.ok(result.records.some(row=>row[3]!==''&&Number(row[3])===0));
   assert.ok(result.displayNames.includes('膳食纤维'));assert.ok(result.records.some(row=>row[1]==='鈉'&&row[2]==='mg'));
+  assert.deepEqual(result.displayNames,result.records.map(row=>simplifyChinese(row[1])));
   const rice=await authoritativeFoodDetails(db,'tfda:A0550601');assert.equal(Number(rice.records.find(row=>row[1]==='熱量')[3]),183);assert.equal(Number(rice.records.find(row=>row[1]==='修正熱量')[3]),182);
   assert.equal('records' in (await authoritativeFood(db,'肉粽')),false);
 });

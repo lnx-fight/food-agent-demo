@@ -12,7 +12,7 @@ legacy.exec(readFileSync(new URL('../migrations/0001_schema.sql',import.meta.url
 legacy.exec(readFileSync(new URL('../migrations/0003_authoritative_foods.sql',import.meta.url),'utf8'));
 legacy.exec("INSERT INTO authoritative_foods(fdc_id,name,kcal,data_type,release,source_url) VALUES(168878,'Legacy USDA rice',130,'old','old','https://fdc.nal.usda.gov/');CREATE TABLE reference_foods(id TEXT PRIMARY KEY,payload TEXT);INSERT INTO reference_foods VALUES('old-reference','{}');INSERT INTO accounts VALUES('existing-account','existing_user','existing-hash','existing-client',7,'2026-10-19');INSERT INTO users(id,client_id,profile,chat_history,created_at,updated_at) VALUES(1,'existing-client','{}','[]','2026-10-19','2026-10-19');INSERT INTO meal_logs(user_id,date,type,name,calories,protein,source,details) VALUES(1,'2026-10-19','午餐','历史米饭',130,2.69,'USDA','{\"nutritionSource\":\"USDA\",\"referenceId\":\"fdc:168878\"}');");
 legacy.close();
-const {resolveNutrition,upsertUser,estimateTextMealRecord,estimateMenuDish}=await import('../server.mjs');
+const {resolveNutrition,upsertUser,estimateTextMealRecord,estimateMenuDish,buildControlledAgentResult}=await import('../server.mjs');
 const db=new DatabaseSync(join(process.env.DATA_DIR,'nutrition.sqlite'));
 after(()=>db.close());
 
@@ -30,6 +30,14 @@ test('文字和菜单营养统一读取食药署，不用部分食材或USDA补�
   const meal=await estimateTextMealRecord('吃了100克米饭');assert.equal(meal.ok,true);assert.equal(meal.calories,182);assert.match(meal.source,/食药署/);
   assert.equal((await estimateTextMealRecord('吃了100克回锅肉')).ok,false);assert.equal(await estimateMenuDish('牛肉汉堡'),null);
   assert.equal((await estimateMenuDish('肉粽')).source.id,'R0400101');
+});
+
+test('繁体食品查询在对话中只显示简体名称，原始名称和数值保留',async()=>{
+  const result=await resolveNutrition('冷凍蝦仁炒飯');
+  assert.equal(result.nutrition.originalName,'冷凍蝦仁炒飯');
+  const answer=buildControlledAgentResult({message:'冷凍蝦仁炒飯的热量',dispatched:{results:[{tool:'search_nutrition',ok:true,args:{name:'冷凍蝦仁炒飯'},result}]}});
+  assert.match(answer.answer,/冷冻虾仁炒饭每100克约 143 kcal/);
+  assert.doesNotMatch(answer.answer,/[凍蝦飯熱]/);
 });
 
 test('配置千问密钥时营养查询命中和未命中均不发出外部请求',async()=>{

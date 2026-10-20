@@ -1299,7 +1299,7 @@ function buildControlledAgentResult({message,routeIntent,mealScenario,ctx,dispat
     const value=nutrition.result?.nutrition;
     if(!value)return controlledAgentResult(nutrition.result?.question||'台湾食药署 没有找到合适记录，请补充更具体的名称或包装营养信息。');
     const data=value.per100g||value;
-    return controlledAgentResult(`${data.name||value.name||nutrition.args.name}每100克约 ${Number(data.kcal)||0} kcal、蛋白质 ${data.protein==null?'未知':`${Number(data.protein)}g`}；来源：台湾食药署食品营养成分资料集；${value.originalName||value.name}（${value.id}）。${value.matchNote||''}`);
+    return controlledAgentResult(`${value.name}每100克约 ${Number(data.kcal)||0} kcal、蛋白质 ${data.protein==null?'未知':`${Number(data.protein)}g`}；来源：台湾食药署食品营养成分资料集（${value.id}）。${value.matchNote||''}`);
   }
   const memory=controlledResultEntry(dispatched,'get_memory');
   if(memory?.ok){
