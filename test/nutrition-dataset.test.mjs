@@ -76,3 +76,19 @@ test('模型仅翻译检索词，即使返回虚构热量或FDC编号也不能�
     assert.equal((await resolveAuthoritativeNutrition(db,'测试中文食品',{translate:async()=>translation})).nutrition,null);
   }
 });
+
+test('常见中文整餐名称离线定位 USDA，不依赖模型额度；不把水果匹配成果奶或豌豆匹配成花生',async()=>{
+  const {offlineChineseFoodQuery}=await import('../nutrition-dataset.mjs');
+  for(const [query,pattern] of [['牛油果',/Avocado, raw/i],['草莓',/Strawberries, raw/i],['豌豆',/peas.*raw/i],['火腿',/^Ham$/],['烤土豆',/Potato, roasted/i]]){
+    let translated=false;
+    const result=await resolveAuthoritativeNutrition(db,query,{translate:async()=>{translated=true;throw new Error('quota exhausted')}});
+    assert.equal(translated,false,query);assert.ok(result.nutrition,query);assert.match(result.nutrition.originalName,pattern);
+    assert.ok(result.trace.includes('offline_chinese_search'));assert.equal(result.nutrition.name,query);
+    assert.deepEqual(result.nutrition.per100g,(await authoritativeFood(db,result.nutrition.id)).per100g);
+  }
+  assert.equal(offlineChineseFoodQuery('烤鸡胸肉沙拉'),'roast chicken breast salad');
+  assert.equal(offlineChineseFoodQuery('鱼香肉丝'),null);
+  assert.equal(offlineChineseFoodQuery('未知配方牛肉'),null);
+  assert.equal(offlineChineseFoodQuery('原味'),null);
+  assert.equal(offlineChineseFoodQuery('梨'),'pear raw');
+});
