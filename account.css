@@ -1,6 +1,6 @@
 [hidden]{display:none!important}
 .account-loading .app-shell,.account-loading #onboarding,.account-loading>.modal-backdrop{visibility:hidden}
-.auth-gate{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at top left,#dff2e8,transparent 65%),#f7f8f4;overflow:auto}
+.auth-gate{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:#183e344d;backdrop-filter:blur(5px);overflow:auto}
 .auth-card{width:min(100%,440px);background:#fff;padding:36px;border:1px solid #e6ebe6;border-radius:24px;box-shadow:0 20px 70px #18352f12}
 .auth-brand{color:#1d6b55;font-size:24px;font-weight:700}.auth-card h1{font-size:24px;margin:18px 0 8px}.auth-card p,.account-note{font-size:13px;color:#71837e;line-height:1.8}
 .auth-card form,.account-card form{display:grid;gap:16px}.auth-card label,.account-card label{display:grid;gap:7px;font-size:13px;font-weight:500}
@@ -16,3 +16,5 @@
 .auth-brand{display:flex;align-items:center;gap:12px}.auth-brand img{display:block;flex:none;border-radius:13px}
 
 .auth-card .auth-first-login{margin:0;padding:10px 12px;background:#eff6ee;border-radius:10px;color:#1d6b55}
+
+.auth-card{position:relative;max-height:calc(100dvh - 48px);overflow:auto}.auth-close{position:absolute;right:16px;top:16px;width:30px;height:30px;border:0;border-radius:50%;background:#eef3ed;color:#557260;font-size:20px!important}.auth-browse{display:block;width:100%;margin-top:8px;text-align:center}.auth-card h1{padding-right:20px}

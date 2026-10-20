@@ -1,6 +1,6 @@
 // 账号界面只持有公开账号信息；登录凭证仅保存在 HttpOnly Cookie 中。
 window.XiaofanAccount=(()=>{
-  let bridge,currentAccount,expiring=false,returnFocus;
+  let bridge,currentAccount,expiring=false,returnFocus,checking=false,accountLoaded=false;
   const el=id=>document.getElementById(id);
   function message(value){el('accountMessage').textContent=value;el('accountPanelMessage').textContent=value}
   async function request(path,body){
@@ -10,7 +10,22 @@ window.XiaofanAccount=(()=>{
   function download(data,name){
     const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
-  function open(){returnFocus=document.activeElement;el('accountPanel').hidden=false;el('accountClose').focus()}
+  function showGuest(){
+    document.body.classList.remove('account-loading');document.body.classList.add('guest-mode');
+    el('guestHome').hidden=false;el('productApp').inert=true;bridge?.guest?.();
+  }
+  function dismissLogin(){
+    el('authGate').hidden=true;el('guestHome').inert=false;document.body.classList.remove('auth-modal-open');
+    el('authPassword').value='';el('authError').textContent='';
+    if(returnFocus?.isConnected)returnFocus.focus();
+  }
+  function requireLogin(reason='登录后开启你的小饭计划'){
+    if(accountLoaded)return true;
+    if(el('authGate').hidden)returnFocus=document.activeElement;
+    el('authReason').textContent=reason;el('authGate').hidden=false;el('guestHome').inert=true;document.body.classList.add('auth-modal-open');
+    (checking||el('authForm').hidden?el('authClose'):el('authUsername')).focus();return false;
+  }
+  function open(){if(!accountLoaded)return requireLogin('登录后管理你的账号与数据');returnFocus=document.activeElement;el('accountPanel').hidden=false;el('accountClose').focus()}
   function close(){el('accountPanel').hidden=true;(returnFocus||el('accountBtn')).focus()}
   function status(kind,text){
     el('accountSyncStatus').textContent=text;el('accountSyncStatus').dataset.status=kind;
@@ -21,15 +36,21 @@ window.XiaofanAccount=(()=>{
     button.disabled=true;try{await action()}catch(error){message(error.message)}finally{button.disabled=false}
   }
   async function boot(callbacks){
-    bridge=callbacks;
+    if(checking)return;bridge=callbacks;checking=true;
+    el('authLoading').hidden=false;el('authLoading').textContent='正在连接账号服务…';el('authRetry').hidden=true;el('authForm').hidden=true;el('legacyChoice').hidden=true;
     try{
       const data=await request('/api/auth/session');
-      if(!data.account){el('authLoading').hidden=true;el('authForm').hidden=false;el('authUsername').focus();return}
+      if(!data.account){
+        currentAccount=null;accountLoaded=false;checking=false;showGuest();el('authLoading').hidden=true;el('authForm').hidden=false;
+        if(sessionStorage.getItem('xiaofan_login_expired')){sessionStorage.removeItem('xiaofan_login_expired');requireLogin('登录状态已过期，请重新登录后继续使用。')}
+        else if(!el('authGate').hidden)el('authUsername').focus();
+        return;
+      }
       currentAccount=data.account;el('accountUsername').textContent=currentAccount.username;
       const remote=await request('/api/user/state');
       const legacy=bridge.legacy();
       if(!remote.state?.profile?.age&&legacy?.profile?.age&&!localStorage.getItem(`xiaofan_legacy_skipped_${currentAccount.id}`)){
-        el('authLoading').hidden=true;el('legacyChoice').hidden=false;
+        checking=false;el('authLoading').hidden=true;el('legacyChoice').hidden=false;requireLogin('登录成功，请选择如何开始使用。');
         el('importLegacyBtn').onclick=()=>busy(el('importLegacyBtn'),async()=>{
           const response=await fetch('/api/user/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan','X-State-Version':String(remote.stateVersion)},body:JSON.stringify(legacy)}),result=await response.json();
           if(!response.ok)throw new Error(result.error||'导入失败');
@@ -38,22 +59,29 @@ window.XiaofanAccount=(()=>{
         el('skipLegacyBtn').onclick=()=>{localStorage.setItem(`xiaofan_legacy_skipped_${currentAccount.id}`,'1');location.reload()};
         return;
       }
-      el('authGate').hidden=true;document.body.classList.remove('account-loading');el('accountBtn').hidden=false;el('onboardingAccount').hidden=false;
+      accountLoaded=true;el('authGate').hidden=true;el('guestHome').hidden=true;el('guestHome').inert=false;el('productApp').inert=false;
+      document.body.classList.remove('account-loading','guest-mode','auth-modal-open');el('accountBtn').hidden=false;el('onboardingAccount').hidden=false;
       bridge.ready(currentAccount,remote);
-    }catch(error){el('authLoading').textContent=`无法连接账号服务：${error.message}`;el('authRetry').hidden=false}
+    }catch(error){
+      currentAccount=null;accountLoaded=false;showGuest();el('authForm').hidden=false;
+      if(error.status===401){el('authLoading').hidden=true;el('authError').textContent='登录状态已失效，请重新登录。'}
+      else{el('authLoading').textContent='暂时连接不上账号服务，仍可继续浏览公开内容。';el('authRetry').hidden=false}
+    }finally{checking=false}
   }
   el('authForm').onsubmit=async event=>{
     event.preventDefault();const button=el('authSubmit');button.disabled=true;el('authError').textContent='';
     try{await request('/api/auth/login',{username:el('authUsername').value,password:el('authPassword').value});el('authPassword').value='';location.reload()}catch(error){el('authError').textContent=error.message}finally{button.disabled=false}
   };
-  el('authRetry').onclick=()=>location.reload();
+  el('authRetry').onclick=()=>boot(bridge);
+  el('authClose').onclick=dismissLogin;el('authBrowse').onclick=dismissLogin;
+  el('authGate').addEventListener('click',event=>{if(event.target===el('authGate'))dismissLogin()});
   el('legacyLogout').onclick=()=>busy(el('legacyLogout'),async()=>{await request('/api/auth/logout',{});location.reload()});
   el('onboardingAccount').onclick=open;
   el('accountBtn').onclick=open;el('accountClose').onclick=close;
   el('accountPanel').addEventListener('click',event=>{if(event.target===el('accountPanel'))close()});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!el('accountPanel').hidden)close()});
+  document.addEventListener('keydown',event=>{if(event.key!=='Escape')return;if(!el('authGate').hidden)dismissLogin();else if(!el('accountPanel').hidden)close()});
   // 将键盘焦点限制在账号对话框中。
-  el('accountPanel').addEventListener('keydown',event=>{if(event.key!=='Tab')return;const items=[...el('accountPanel').querySelectorAll('button,input,a')].filter(item=>!item.disabled&&item.getClientRects().length),first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}});
+  for(const id of ['accountPanel','authGate'])el(id).addEventListener('keydown',event=>{if(event.key!=='Tab')return;const items=[...el(id).querySelectorAll('button,input,a[href]')].filter(item=>!item.disabled&&item.getClientRects().length),first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}});
   el('accountExport').onclick=()=>busy(el('accountExport'),async()=>{
     await bridge.flush();const data=await request('/api/account/export');
     if(bridge.dirty())data.unsyncedLocalState=bridge.local();
@@ -84,5 +112,5 @@ window.XiaofanAccount=(()=>{
     });
   };
   el('accountDangerAction').onchange=()=>{const deleting=el('accountDangerAction').value==='delete';el('accountDangerHint').textContent=deleting?'输入“注销账号”，删除账号及全部云端记录，操作无法撤销。':'输入“清空数据”，删除档案、记录、对话、计划及工具日志，保留账号。';el('accountDangerConfirmation').value=''};
-  return {boot,status,open,expired(){if(expiring)return;expiring=true;document.body.classList.add('account-loading');location.reload()}};
+  return {boot,status,open,requireLogin,dismissLogin,expired(){if(expiring)return;expiring=true;sessionStorage.setItem('xiaofan_login_expired','1');location.reload()}};
 })();

@@ -19,7 +19,7 @@ const state = {
 
 // GitHub Pages 无法运行 Node.js 服务端。仅独立的 github.io 静态演示站使用预置响应；正式产品始终要求登录，
 // 仅使用明确标注的预置演示响应，真实服务端部署保持原有 API 行为。
-// The production product always requires a session; URL flags cannot bypass sign-in.
+// Public discovery is open; personal functions require a session and URL flags cannot bypass it.
 const DEMO_MODE=location.hostname.endsWith('.github.io');
 
 let STORAGE_KEY = 'fitpilot_user_v3';
@@ -555,12 +555,13 @@ handleAgentPrompt = async function(prompt){
 };
 
 if(DEMO_MODE){
-  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#authGate').hidden=true;document.body.classList.remove('account-loading');$('#restartBtn').hidden=false;
+  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#authGate').hidden=true;$('#guestHome').hidden=true;$('#productApp').inert=false;document.body.classList.remove('account-loading','guest-mode');$('#restartBtn').hidden=false;
   $('#onboardingDataNote').textContent='演示数据只保存在当前浏览器中。完成建档后即可体验预置交互。';$('#onboardingStoragePoint').textContent='✓ 本地保存，可随时清除';
   userData=loadUser();if(userData){$('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation()}else initOnboarding();
   loadServerUser();pollAgent();runDailyReview();connectAgentEvents();
 }else{
   window.XiaofanAccount.boot({
+    guest(){accountReady=false;userData=null;agentEventSource?.close();clearTimeout(serverSyncTimer);closeModals()},
     legacy:()=>{try{return JSON.parse(localStorage.getItem('fitpilot_user_v3'))}catch{return null}},
     ready(account,remote){
       STORAGE_KEY=`fitpilot_account_${account.id}`;CLIENT_ID=account.id;accountVersion=remote.stateVersion;accountReady=true;
@@ -655,6 +656,7 @@ async function demoApi(url,options={}){
 }
 async function apiFetch(url,options={}){
   if(DEMO_MODE)return demoApi(url,options);
+  if(!accountReady&&new URL(url,location.origin).pathname!=='/api/health'){window.XiaofanAccount.requireLogin('登录后使用小饭的个人功能。');throw Object.assign(new Error('请先登录'),{status:401,loginRequired:true})}
   const response=await fetch(url,{...options,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan',...(options.headers||{})}});const data=await response.json().catch(()=>({error:'服务返回了无效数据'}));if(response.status===401)window.XiaofanAccount?.expired();if(!response.ok)throw Object.assign(new Error(data.error||`请求失败 ${response.status}`),{status:response.status,data});return data;
 }
 async function checkServices(){try{const d=await apiFetch('/api/health');serviceStatus=d.services;return d}catch{return null}}

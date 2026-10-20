@@ -1,7 +1,7 @@
 // 小饭 PWA Service Worker：应用外壳缓存优先，API 一律走网络
 // 修改应用壳文件时同步递增版本，避免缓存优先策略继续提供旧版 app.js。
-const CACHE='xiaofan-v23';
-const SHELL=['./','./index.html','./styles.css','./app.js','./adaptive-plan.js','./pantry.css','./onboarding.css','./api.css','./record-status.css','./adaptive-plan.css','./account-ui.js','./account.css','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
+const CACHE='xiaofan-v24';
+const SHELL=['./','./index.html','./styles.css','./app.js','./adaptive-plan.js','./pantry.css','./onboarding.css','./api.css','./record-status.css','./adaptive-plan.css','./account-ui.js','./account.css','./guest.css','./guest-ui.js','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
