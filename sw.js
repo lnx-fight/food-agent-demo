@@ -1,7 +1,7 @@
 // 小饭 PWA Service Worker：应用外壳缓存优先，API 一律走网络
 // 修改应用壳文件时同步递增版本，避免缓存优先策略继续提供旧版 app.js。
-const CACHE='xiaofan-v28';
-const SHELL=['./','./index.html','./styles.css?v=28','./app.js?v=28','./adaptive-plan.js?v=28','./pantry.css?v=28','./onboarding.css?v=28','./api.css?v=28','./record-status.css?v=28','./adaptive-plan.css?v=28','./account-ui.js?v=28','./account.css?v=28','./guest.css?v=28','./guest-ui.js?v=28','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
+const CACHE='xiaofan-v29';
+const SHELL=['./','./index.html','./styles.css?v=29','./app.js?v=29','./adaptive-plan.js?v=29','./pantry.css?v=29','./onboarding.css?v=29','./api.css?v=29','./record-status.css?v=29','./adaptive-plan.css?v=29','./account-ui.js?v=29','./account.css?v=29','./guest.css?v=29','./guest-ui.js?v=29','./food-catalog.js?v=29','./food-catalog.css?v=29','./xiaofan-icon.png','./icon-192.png','./apple-touch-icon.png','./favicon-32.png','./favicon.ico','./site.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));

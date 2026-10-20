@@ -10,7 +10,7 @@ export const TFDA_TERMS=[...terms.values()];
 export const NUTRITION_MANIFEST=manifest;
 
 export function normalizeAuthoritativeFood(row){
-  const note=notes.get(row.food_id),bread=row.food_id==='Q1001001';
+  const note=notes.get(row.food_id),bread=row.food_id==='Q1001001',patty=/汉堡肉/.test(simplifyChinese(row.original_name));
   return {
     id:`tfda:${row.food_id}`,name:simplifyChinese(row.original_name),originalName:row.original_name,englishName:row.english_name,
     category:row.category,description:simplifyChinese(row.original_description),originalDescription:row.original_description,originalAliases:row.original_aliases,
@@ -19,7 +19,7 @@ export function normalizeAuthoritativeFood(row){
     energyBasis:row.energy_basis,energyBasisLabel:simplifyChinese(row.energy_basis||''),nutrientCount:row.nutrient_count,
     source:{code:'TFDA',type:'台湾食药署食品营养成分资料集',publisher:manifest.publisher,url:manifest.datasetUrl,downloadUrl:manifest.downloadUrl,id:row.food_id,release:manifest.release,retrievedOn:manifest.retrievedOn,license:manifest.license,licenseUrl:manifest.licenseUrl,attribution:manifest.attribution},
     confidence:'high',matchType:'authoritative_database',
-    ...((note||bread)?{matchNote:bread?'此记录为汉堡面包，不含肉饼和夹馅，不能代表完整汉堡。':note}:{})
+    ...((note||bread||patty)?{matchNote:bread?'此记录为汉堡面包，不含肉饼和夹馅，不能代表完整汉堡。':patty?'此记录为汉堡肉饼，不含面包和其他夹馅，不能代表完整汉堡。':note}:{})
   };
 }
 

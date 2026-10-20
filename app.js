@@ -292,6 +292,18 @@ function prepareMealRecordForm(date=''){
 function openMealRecord(date=localDateKey(),type=mealTypeByTime()){
   setActiveMealType(type);const form=$('#manualMealForm');form.reset();delete form.dataset.editingId;clearMealNutritionState(form);form.elements.type.value=type;prepareMealRecordForm(date);form.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';openModal('manualMealModal');
 }
+async function resumeCatalogFood(){
+  if(!userData?.profile?.age)return;
+  const selected=window.XiaofanCatalog?.takeSelection();
+  if(!selected||!/^tfda:[A-R]\d{4,8}$/.test(selected.id)||!(selected.grams>0&&selected.grams<=3000))return;
+  openMealRecord();
+  await lookupDatasetNutrition(selected.id);
+  const form=$('#manualMealForm');
+  if(form.dataset.matchedReference!==selected.id)return;
+  form.elements.grams.min='0.1';form.elements.grams.step='any';form.elements.grams.value=selected.grams;
+  recalculateBarcodeNutrition();
+}
+document.addEventListener('xiaofan:food-selected',resumeCatalogFood);
 function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference','nutritionSourceUrl','referenceLabel','lookupToken'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1';$('#nutritionLookupStatus').textContent=''}
 function daysBetween(a,b){ return Math.max(1,Math.ceil((new Date(b)-new Date(a))/86400000)); }
 function calculateProfile(profile){
@@ -357,7 +369,7 @@ $('#onboardingForm').addEventListener('submit',e=>{
   e.preventDefault();if(!validateStep(3))return;
   const profile=onboardingValues();
   userData={profile,weightLogs:[{date:localDateKey(),weight:profile.weight,createdAt:new Date().toISOString()}],mealLogs:[],chatHistory:[],weeklyPlan:null,pendingWeeklyPlan:null,upcomingWeeklyPlan:null,weeklyPlanHistory:[],dayClosures:[],reminderSettings:{enabled:false,maxPerDay:3,quietStart:'22:00',quietEnd:'08:00'},menuImports:[],createdAt:new Date().toISOString()};
-  saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showToast('建档完成，Agent已生成你的第一份计划');
+  saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showToast('建档完成，Agent已生成你的第一份计划');resumeCatalogFood();
 });
 
 function hydrateApp(){

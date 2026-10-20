@@ -2,6 +2,7 @@ import http from 'node:http';
 import {env,isCloudflare} from './runtime.mjs';
 import {atomic} from './database.mjs';
 import {TFDA_TERMS,resolveAuthoritativeNutrition,authoritativeFoodDetails,NUTRITION_MANIFEST} from './nutrition-dataset.mjs';
+import {browseFoods,catalogCategories,catalogDetails,isPublicFoodRoute} from './food-catalog.mjs';
 import {
   readFileSync,
   existsSync,
@@ -361,6 +362,11 @@ async function personalizeRestaurant(restaurant,recommendation,context={}){
   return {...recommendation,dishes:allowedDishes,mealStructure:removedForPreference?null:recommendation.mealStructure,personalization:{targets,hours,mealDisplay,kcal,protein,confidence,reason,matchedCount:estimates.length,score,blockedTerms:blocked,nutritionPending:kcal==null}};
 }
 async function api(req,res,url){
+  if(isPublicFoodRoute(req,url)){
+    if(url.pathname.endsWith('/categories'))return json(res,200,{ok:true,...await catalogCategories(db)});
+    if(url.pathname.endsWith('/details')){const result=await catalogDetails(db,url.searchParams.get('id'));return json(res,result?200:404,result?{ok:true,result}:{error:'当前数据库未收录此食品'});}
+    return json(res,200,{ok:true,...await browseFoods(db,Object.fromEntries(url.searchParams))});
+  }
   if(req.method==='GET'&&url.pathname==='/api/health'){const count=await db.prepare('SELECT COUNT(*) count,SUM(nutrient_count) nutrient_rows FROM nutrition_foods').get();return json(res,200,{ok:true,services:{qwen:!!env.DASHSCOPE_API_KEY,tfda:true,usda:false,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'TFDA',foodCount:0,authoritativeFoodCount:count.count,nutrientRecordCount:count.nutrient_rows,datasetRelease:NUTRITION_MANIFEST.release})}
   if(req.method==='GET'&&url.pathname==='/api/nutrition/details'){const result=await authoritativeFoodDetails(db,url.searchParams.get('q'));return json(res,result?200:404,result?{ok:true,result}:{ok:false,error:'未找到食药署食品明细'})}
   if(req.method==='GET'&&['/api/nutrition/dataset-search','/api/nutrition/search','/api/nutrition/resolve'].includes(url.pathname)){
@@ -1737,7 +1743,7 @@ const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,`http://${req.headers.host||'localhost'}`);
     if(url.pathname.startsWith('/api/')){
       if(await accounts.handle(req,res,url)!==false)return;
-      if(!(req.method==='GET'&&url.pathname==='/api/health'))release=(await accounts.authorize(req,url));
+      if(!(req.method==='GET'&&url.pathname==='/api/health')&&!isPublicFoodRoute(req,url))release=(await accounts.authorize(req,url));
       const handled=await api(req,res,url);if(handled===false)return json(res,404,{error:'API not found'});return;
     }
     staticFile(req,res,url);

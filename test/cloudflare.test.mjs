@@ -26,6 +26,10 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     }
     const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,2213);
     assert.equal((await call('/api/user/state')).status,401);
+    const publicFoods=await call('/api/food-catalog?q='+encodeURIComponent('米饭')+'&category=all');assert.equal(publicFoods.status,200);assert.equal(publicFoods.data.foods[0].id,'tfda:A0550601');assert.equal(publicFoods.headers.get('set-cookie'),null);
+    const publicCategories=await call('/api/food-catalog/categories');assert.equal(publicCategories.data.total,2213);
+    const publicDetail=await call('/api/food-catalog/details?id=tfda:A0550601');assert.equal(publicDetail.status,200);assert.equal(publicDetail.data.result.nutrients.length,104);
+    assert.equal((await call('/api/device/session')).data.device,null);
     const alice=await call('/api/device/session',{body:{}});
     assert.equal(alice.status,201,JSON.stringify(alice.data));
     assert.match(alice.headers.get('set-cookie'),/Secure/);

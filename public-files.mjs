@@ -5,7 +5,7 @@ import {resolve,sep,extname} from 'node:path';
 // 仅发布浏览器实际使用的文件，禁止把源码、密钥和用户数据库当作静态资源。
 export const PUBLIC_FILES=Object.freeze([
   'index.html','app.js','adaptive-plan.js','sw.js','styles.css','pantry.css',
-  'onboarding.css','api.css','record-status.css','adaptive-plan.css','account-ui.js','account.css','guest.css','guest-ui.js',
+  'onboarding.css','api.css','record-status.css','adaptive-plan.css','account-ui.js','account.css','guest.css','guest-ui.js','food-catalog.js','food-catalog.css',
   'xiaofan-icon.png','icon-192.png','apple-touch-icon.png','favicon-32.png','favicon.ico','site.webmanifest'
 ]);
 const allowed=new Set(PUBLIC_FILES);
