@@ -17,9 +17,7 @@ const state = {
   ingredients: ['鸡胸肉','番茄','鸡蛋','米饭']
 };
 
-// GitHub Pages 无法运行 Node.js 服务端。仅独立的 github.io 静态演示站使用预置响应；正式产品始终要求登录，
-// 仅使用明确标注的预置演示响应，真实服务端部署保持原有 API 行为。
-// Public discovery is open; personal functions require a session and URL flags cannot bypass it.
+// Only github.io uses static demo responses. Production uses isolated browser sessions, without username/password login.
 const DEMO_MODE=location.hostname.endsWith('.github.io');
 
 let STORAGE_KEY = 'fitpilot_user_v3';
@@ -31,7 +29,7 @@ const pendingSnapshot=()=>{try{return JSON.parse(localStorage.getItem(pendingKey
 const syncMetadata=()=>{try{return JSON.parse(localStorage.getItem(STORAGE_KEY+'_sync'))||{}}catch{return {}}};
 const syncDirty=()=>syncMetadata().dirty===true||!!pendingSnapshot();
 function setSyncMetadata(dirty){localStorage.setItem(STORAGE_KEY+'_sync',JSON.stringify({version:accountVersion,dirty}))}
-function syncStatus(kind,text){if(!DEMO_MODE)window.XiaofanAccount?.status(kind,text)}
+function syncStatus(kind,text){if(!DEMO_MODE)window.XiaofanDevice?.status(kind,text)}
 function preserveConflict(){syncPaused=true;if(userData)localStorage.setItem(pendingKey(),JSON.stringify({state:userData,version:accountVersion}));syncStatus('conflict','同步冲突，点击处理')}
 window.addEventListener('storage',event=>{if(!DEMO_MODE&&accountReady&&event.key===STORAGE_KEY&&event.newValue!==lastStoredSnapshot)preserveConflict()});
 let userData = null;
@@ -555,14 +553,13 @@ handleAgentPrompt = async function(prompt){
 };
 
 if(DEMO_MODE){
-  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#authGate').hidden=true;$('#guestHome').hidden=true;$('#productApp').inert=false;document.body.classList.remove('account-loading','guest-mode');$('#restartBtn').hidden=false;
+  document.documentElement.dataset.demoMode='true';$('#demoModeBanner').hidden=false;$('#guestHome').hidden=true;$('#productApp').inert=false;document.body.classList.remove('account-loading','guest-mode');$('#restartBtn').hidden=false;
   $('#onboardingDataNote').textContent='演示数据只保存在当前浏览器中。完成建档后即可体验预置交互。';$('#onboardingStoragePoint').textContent='✓ 本地保存，可随时清除';
   userData=loadUser();if(userData){$('#onboarding').classList.add('hidden');hydrateApp();restoreAgentConversation()}else initOnboarding();
   loadServerUser();pollAgent();runDailyReview();connectAgentEvents();
 }else{
-  window.XiaofanAccount.boot({
+  window.XiaofanDevice.boot({
     guest(){accountReady=false;userData=null;agentEventSource?.close();clearTimeout(serverSyncTimer);closeModals()},
-    legacy:()=>{try{return JSON.parse(localStorage.getItem('fitpilot_user_v3'))}catch{return null}},
     ready(account,remote){
       STORAGE_KEY=`fitpilot_account_${account.id}`;CLIENT_ID=account.id;accountVersion=remote.stateVersion;accountReady=true;
       lastStoredSnapshot=localStorage.getItem(STORAGE_KEY);
@@ -643,12 +640,12 @@ async function demoApi(url,options={}){
   if(path==='/api/agent/check')return {ok:true,tasks:[]};
   if(path==='/api/agent/review')return {ok:true,result:{adjustment:0,decidedBy:'demo',message:'面试演示模式不修改预算'}};
   if(path==='/api/agent/logs')return {ok:true,logs:[{kind:'agent_skill',detail:'next-meal-decision:demo-ready',createdAt:now},{kind:'agent_tool',detail:'read_user_state:ok',createdAt:now},{kind:'agent_tool',detail:'get_meal_budget:ok',createdAt:now},{kind:'agent_chat_done',detail:'预置演示流程完成',createdAt:now}]};
-  if(path==='/api/recipes/diy')throw new Error('请登录后使用食药署食材数据生成食谱。');
+  if(path==='/api/recipes/diy')throw new Error('请在正式网站开始使用后使用食药署食材数据生成食谱。');
   if(path==='/api/plans/daily-meals')return {ok:true,result:demoDailyPlan(payload)};
   if(path==='/api/plans/weekly')return {ok:true,result:demoNaturalWeek(payload),trace:['demo_natural_week']};
   if(path==='/api/menus/parse')return {ok:true,result:demoMenuParse(payload),trace:['demo_full_menu_parse']};
   if(path==='/api/agent/chat')return {ok:true,result:demoAgentReply(payload)};
-  if(path==='/api/meals/analyze'||path.startsWith('/api/nutrition/'))throw new Error('请登录后查询食药署数据；演示模式不提供预置营养值。');
+  if(path==='/api/meals/analyze'||path.startsWith('/api/nutrition/'))throw new Error('请在正式网站开始使用后查询食药署数据；演示模式不提供预置营养值。');
   if(path==='/api/location/geocode')return {ok:true,result:{lat:31.2304,lng:121.4737,formattedAddress:`${new URL(String(url),location.origin).searchParams.get('address')||'演示地点'}（预置坐标）`}};
   if(path==='/api/restaurants/nearby')return {ok:true,results:[{name:'轻食实验室',address:'演示路 88 号',distance:420,location:'121.4737,31.2304'},{name:'谷物食堂',address:'演示路 126 号',distance:680,location:'121.4737,31.2304'},{name:'暖碗餐吧',address:'演示路 208 号',distance:930,location:'121.4737,31.2304'}]};
   if(path==='/api/restaurants/recommendations')return {ok:true,...demoRestaurants(payload)};
@@ -656,8 +653,8 @@ async function demoApi(url,options={}){
 }
 async function apiFetch(url,options={}){
   if(DEMO_MODE)return demoApi(url,options);
-  if(!accountReady&&new URL(url,location.origin).pathname!=='/api/health'){window.XiaofanAccount.requireLogin('登录后使用小饭的个人功能。');throw Object.assign(new Error('请先登录'),{status:401,loginRequired:true})}
-  const response=await fetch(url,{...options,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan',...(options.headers||{})}});const data=await response.json().catch(()=>({error:'服务返回了无效数据'}));if(response.status===401)window.XiaofanAccount?.expired();if(!response.ok)throw Object.assign(new Error(data.error||`请求失败 ${response.status}`),{status:response.status,data});return data;
+  if(!accountReady&&new URL(url,location.origin).pathname!=='/api/health'){throw Object.assign(new Error('请先点击“开始使用”连接此浏览器的使用空间。'),{status:401})}
+  const response=await fetch(url,{...options,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan',...(options.headers||{})}});const data=await response.json().catch(()=>({error:'服务返回了无效数据'}));if(response.status===401)window.XiaofanDevice?.expired();if(!response.ok)throw Object.assign(new Error(data.error||`请求失败 ${response.status}`),{status:response.status,data});return data;
 }
 async function checkServices(){try{const d=await apiFetch('/api/health');serviceStatus=d.services;return d}catch{return null}}
 checkServices();

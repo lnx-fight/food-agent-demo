@@ -31,7 +31,7 @@ npm start
 
 生产站点：[xiaofan-food.pages.dev](https://xiaofan-food.pages.dev/)。Pages Functions 复用现有 Node HTTP 业务代码，数据库调用改为异步；本地继续使用 SQLite，线上通过请求上下文绑定 D1，不依赖本地磁盘。静态构建只发布 `public-files.mjs` 白名单，密钥、数据库、原始下载包和服务端源码不作为静态文件上传。
 
-网址于 2026-10-16 更换为 `xiaofan-food.pages.dev`，继续使用同一个 D1；由于浏览器 Cookie 和本机暂存按域名隔离，新网址需重新登录，尚未同步的旧网址本机修改需先在旧网址完成同步。
+网址于 2026-10-16 更换为 `xiaofan-food.pages.dev`，继续使用同一个 D1；由于浏览器 Cookie 和本机暂存按域名隔离，新网址需要独立的浏览器使用凭证，尚未同步的旧网址本机修改需先在旧网址完成同步。
 
 项目及数据库编号等非敏感配置位于 `cloudflare/project.json`。`.github/workflows/cloudflare.yml` 对 push 和 PR 执行语法检查、Node 回归测试、真实 workerd/D1 集成测试、食药署导入校验和 30 条 Agent 数据集结构校验；只有 `main` 的 CI 通过，才下载同一次 CI 的构建产物、执行版本化 D1 迁移并发布 Pages。PR 和其他分支不部署生产环境，也不连接生产数据库。生产部署串行执行，发布后检查 `/api/health` 的食药署食品与营养明细数量。
 
@@ -51,7 +51,7 @@ npm run deploy:pages
 
 资源管理和 D1 迁移使用 `cf`。当前固定版本 `cf@1.0.0-beta.17` 的 `cf pages deploy` 明确不支持此 Pages Direct Upload；仅上传步骤按该命令的提示调用固定版本 `npx wrangler@4.151.0 pages deploy --no-bundle`，不创建 Wrangler 配置。兼容日期与 `nodejs_compat`、生产 `DB` 绑定在 Pages 项目中配置；重建项目时需重新配置这些设置。Preview 不绑定生产 D1。
 
-初始化迁移 `migrations/0001_schema.sql` 创建业务表；`0007_tfda_schema.sql` 和 `0008_tfda_snapshot_*.sql` 导入食药署快照，`0009_tfda_activate.sql` 校验食品及营养明细数量后删除 USDA 表和搜索索引。当前仓库已移除旧 USDA 的 `0004_usda_snapshot.sql` 数据文件，既有 D1 中已经执行的迁移记录保留，新数据库跳过这份已停用快照。其他已发布的 schema/cleanup 迁移保持历史原状；后续数据更新须新增迁移。账号、历史确认的饮食、体重、对话及原始来源字段不重算、不删除。本地账号不会自动上传线上。Pages 密码使用 PBKDF2-SHA256（100,000 次），本地 scrypt 格式继续支持。
+初始化迁移 `migrations/0001_schema.sql` 创建业务表；`0007_tfda_schema.sql` 和 `0008_tfda_snapshot_*.sql` 导入食药署快照，`0009_tfda_activate.sql` 校验食品及营养明细数量后删除 USDA 表和搜索索引。当前仓库已移除旧 USDA 的 `0004_usda_snapshot.sql` 数据文件，既有 D1 中已经执行的迁移记录保留，新数据库跳过这份已停用快照。其他已发布的 schema/cleanup 迁移保持历史原状；后续数据更新须新增迁移。账号、历史确认的饮食、体重、对话及原始来源字段不重算、不删除。本地账号不会自动上传线上。旧密码哈希只作为历史数据保留，密码接口已停用；新使用空间不创建可登录的密码。
 
 Pages 采用请求触发的提醒检查和约一分钟重连的 SSE 快照，不运行常驻 Node 定时器；没有浏览器请求时不会定时推送，跨实例不共享内存 SSE 连接。生产 D1 备份应使用 Cloudflare 导出或 Time Travel；`scripts/manage-data.mjs` 仅管理本地 SQLite。回滚 Pages 代码不会回滚数据库；数据库迁移应向后兼容。
 
@@ -71,7 +71,7 @@ D1 免费套餐当前提供每天 500 万行读取、10 万行写入和账号总
 
 重建快照：`npm run data:download -- --offline`。原包校验不一致时脚本拒绝导入；数据更新需人工审阅并新增迁移，不覆盖已经部署的快照。脚本通过22个小于1MB的迁移文件准备完整数据；最后数量校验通过后才删除旧USDA表。图片识别、DIY、菜单、文字记餐和 Agent 营养 Tool 均改读食药署。用户仍可按实际包装标签手动记录。
 
-API示例：`/api/nutrition/search?q=米饭`、`/api/nutrition/search?q=tfda:R0400101`；`/api/nutrition/details?q=tfda:A0550601` 返回完整104项原始营养明细及简体指标名称。网站的食品名、样品说明、能量口径（`energyBasisLabel`）、营养指标和营养查询对话统一显示简体，不展示繁体原名；繁体输入仍可检索。原始字段与官方快照仅用于追溯，数值不因文字转换而变化。这些接口均要求登录。历史记录保留原来的数值和来源，包括旧USDA引用；不再作为新查询的数据源。升级前已备份本地数据库。切换后回滚旧代码需同时恢复相应食品数据库，优先修复前进。
+API示例：`/api/nutrition/search?q=米饭`、`/api/nutrition/search?q=tfda:R0400101`；`/api/nutrition/details?q=tfda:A0550601` 返回完整104项原始营养明细及简体指标名称。网站的食品名、样品说明、能量口径（`energyBasisLabel`）、营养指标和营养查询对话统一显示简体，不展示繁体原名；繁体输入仍可检索。原始字段与官方快照仅用于追溯，数值不因文字转换而变化。这些接口均要求有效的浏览器使用凭证。历史记录保留原来的数值和来源，包括旧USDA引用；不再作为新查询的数据源。升级前已备份本地数据库。切换后回滚旧代码需同时恢复相应食品数据库，优先修复前进。
 
 ## 发布面试演示到 GitHub Pages
 
@@ -98,23 +98,21 @@ AMAP_WEB_SERVICE_KEY=...     # 可选：附近餐馆
 
 部署成功后，先访问 `https://<服务名>.onrender.com/api/health`；确认返回 `ok: true` 后，再把本 README “在线体验”中的占位链接换成该地址并推送到 GitHub。之后每次推送默认分支，Render 会自动重新部署。
 
-公开服务的静态资源由 `public-files.mjs` 白名单控制，只提供网页、脚本和样式；`.env`、Git 文件、服务端源码、SQLite 数据库及其他个人文件不对外提供。新增浏览器资源时，需要同步更新该白名单及适用的 PWA 缓存列表。公开托管时只上传产品源码，勿上传本地 `.env`、数据库、备份和个人文件。完整功能版的全部业务接口均要求登录，服务器根据会话确定数据所属账号，不信任客户端传入的 `clientId`。
+公开服务的静态资源由 `public-files.mjs` 白名单控制，只提供网页、脚本和样式；`.env`、Git 文件、服务端源码、SQLite 数据库及其他个人文件不对外提供。新增浏览器资源时，需要同步更新该白名单及适用的 PWA 缓存列表。公开托管时只上传产品源码，勿上传本地 `.env`、数据库、备份和个人文件。完整功能版的业务接口使用浏览器会话隔离数据，无需账号密码，服务器根据凭证确定数据所属空间，不信任客户端传入的 `clientId`。
 
 Render 默认文件系统是临时的；没有持久磁盘时，账号、密码哈希、会话和用户记录都会随重启或部署丢失。不得用临时文件系统承载正式账号。当前 SQLite 方案只运行单个服务实例；需要多实例时应迁移到共享数据库。食药署数据首次启动由版本化快照初始化，账号和用户记录保存在持久目录中。参见 [Render 持久磁盘说明](https://render.com/docs/disks)。
 
-线上必须通过 HTTPS 访问，生产环境会话 Cookie 强制 `Secure`。可设置 `PUBLIC_ORIGIN=https://实际域名` 固定可信来源，不能带结尾斜杠；自定义域名切换时同步修改。写接口同时验证来源、自定义请求头和 JSON 类型；不要开放通配 CORS。只有确认代理会覆盖 `X-Forwarded-For` 时才启用 `TRUST_PROXY=true`，否则登录限流按直接连接地址统计。
+线上必须通过 HTTPS 访问，生产环境会话 Cookie 强制 `Secure`。可设置 `PUBLIC_ORIGIN=https://实际域名` 固定可信来源，不能带结尾斜杠；自定义域名切换时同步修改。写接口同时验证来源、自定义请求头和 JSON 类型；不要开放通配 CORS。只有确认代理会覆盖 `X-Forwarded-For` 时才启用 `TRUST_PROXY=true`，否则使用空间创建限流按直接连接地址统计。
 
-## 从新用户开始测试
+## 免账号使用与数据保存
 
-首次访问完整功能版显示公开发现页，可免登录浏览餐食灵感、分类和功能示例；点击记餐、营养查询、计划、食谱或对话等实际功能时，才显示可关闭的登录弹窗，关闭后继续浏览。登录使用统一入口：输入未使用的用户名和密码会自动创建账号并登录，无需单独注册；已有用户名必须使用原密码，不能借首次登录覆盖密码。用户名为3–32位字母、数字或下划线（不区分大小写），密码为12–128个字符。本地密码使用独立随机盐的 scrypt，Pages 使用 PBKDF2-SHA256；会话使用7天 HttpOnly / SameSite=Strict Cookie，数据库只存凭证哈希。登录有持久化频率限制；同名并发首次登录通过唯一约束复用账号，并验证创建成功者的密码。请核对用户名：未使用过的拼写会创建新账号。当前不提供邮箱验证、邮件找回、第三方登录或管理员用户管理后台。
+网站不再提供用户名/密码注册、登录、改密码和退出入口。每次打开均先显示可自由浏览的公开内容，不弹个人资料表单、不读取个人缓存或调用个人接口；即使有旧会话，也等点击“开始使用”或具体功能后才加载已有记录，首次使用才进入个人档案设置。后台签发随机的180天 HttpOnly、SameSite=Strict 浏览器凭证，生产环境启用 Secure；访问产品时续期，不将身份凭证写入本机存储、导出或网页。
 
-个人产品功能仍强制登录后使用，未登录业务 API 返回401；`?demo` 不绕过认证。访客页面不读取个人缓存或访问个人接口，示例不对应真实用户记录；离线或账号服务不可用时仍可浏览已缓存的公开内容。独立 GitHub Pages 静态面试演示保留预置数据模式，不连接生产个人数据。
+个人数据与此浏览器的凭证绑定，在服务器 SQLite / D1 保存，并在本机暂存。不同浏览器的身份独立；查询参数或请求体中的 clientId 不能认领别人的历史数据。保存仍有版本锁与冲突副本，防止多个标签页静默覆盖。公开浏览不创建个人空间。连接失败可以继续浏览并重试，Cookie被禁用时明确提示。
 
-档案、体重、饮食记录、对话与计划按账号同步至服务端 SQLite，同一账号可在其他设备登录并恢复。浏览器暂存按账号分开；页面显示保存、失败和冲突状态。保存使用版本校验，多设备或多标签页发生冲突时暂停自动同步，保留本机修改，并提供“导出本机修改 / 载入云端最新数据”，不静默覆盖。启动时需要连接账号服务；离线期间已完成的本机修改会暂存，恢复后继续同步或提示冲突。
+侧栏“我的数据”保留导出、同步重试、冲突处理及清空/删除。清空和删除需要指定确认文字，由有效浏览器凭证限定范围，不再要求密码。删除会撤销旧会话并清理对应档案、记录及派生数据；导出不包含凭证。
 
-侧边栏“账号与数据”提供修改密码、退出当前/全部设备、导出全部个人数据、清空记录和注销账号。修改密码撤销其他会话；清空保留账号，注销同时删除账号。清空与注销均要求当前密码和指定确认文字，并删除档案、饮食、体重、对话、计划、提醒、记忆、工具日志及相关派生记录；旧会话被撤销，避免其他设备将旧状态重新写回。导出不含密码或会话凭证，尚未同步的本机修改会另附在导出文件中。
-
-升级时自动新增 `accounts`、`account_sessions`、`auth_attempts` 表，保留原有用户表。旧版 `clientId` 不作为账号认领凭证；旧服务器记录不会自动分配给任意新账号。首次登录空账号时，若本机有旧档案，会要求用户明确确认后才导入。旧服务器记录只有管理员备份可保留，不能只凭知道其 `clientId` 恢复；GitHub Pages 静态演示仍保留原有浏览器模式。
+无需数据库迁移，旧账号及历史数据不删除、不重算；旧有效Cookie自动延续原档案。没有有效Cookie的旧账号不能再用用户名密码恢复，也不能凭旧clientId认领。清除浏览器数据、凭证过期、无痕窗口关闭或更换设备后，无法自动恢复原使用空间，请及时导出。当前不提供跨设备身份恢复或导入备份功能。原本机暂存保留，不自动混入新空间。
 
 ## 数据备份与恢复
 
@@ -227,15 +225,14 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 
 ## 后端API
 
-除 `GET /api/health` 与注册、登录、会话查询外，所有接口都需要有效登录 Cookie。写接口要求 `Content-Type: application/json` 和 `X-Requested-With: Xiaofan`。`GET /api/user/state` 返回 `stateVersion`，保存时必须在 `X-State-Version` 中回传该值，冲突返回409。
+除 `GET /api/health` 与浏览器会话初始化/查询外，所有业务接口都需要有效的浏览器 Cookie，不需要用户名密码。写接口要求 `Content-Type: application/json` 和 `X-Requested-With: Xiaofan`。`GET /api/user/state` 返回 `stateVersion`，保存时必须在 `X-State-Version` 中回传该值，冲突返回409。
 
 | 接口 | 功能 |
 |---|---|
-| `POST /api/auth/login`、`GET /api/auth/session` | 统一登录（首次自动创建账号，201；已有账号验密，200）及会话查询；`register` 仅兼容旧客户端 |
-| `POST /api/auth/logout`、`POST /api/auth/logout-all` | 退出当前或全部设备 |
-| `POST /api/account/password` | 校验当前密码后修改密码，撤销其他会话 |
-| `GET /api/account/export` | 导出当前账号的个人数据 |
-| `POST /api/account/clear`、`POST /api/account/delete` | 校验密码及确认文字后清空记录或注销账号 |
+| `GET/POST /api/device/session` | 查询/创建或续期浏览器使用空间，无需用户名密码 |
+| `GET /api/device/export` | 导出当前浏览器的个人数据 |
+| `POST /api/device/clear`、`POST /api/device/delete` | 校验浏览器凭证与确认文字，清空记录或删除使用空间 |
+| `/api/auth/*`、`/api/account/*` | 账号密码功能已移除，返回410，旧客户端须刷新 |
 | `GET /api/health` | 查看服务和密钥配置状态 |
 | `GET /api/nutrition/search?q=`、`GET /api/nutrition/resolve?q=` | 食药署简繁体/英文自动匹配与 TFDA 整合编号精确读取 |
 | `GET /api/nutrition/details?q=tfda:整合编号` | 完整营养明细、单位和样本资料 |
@@ -263,6 +260,6 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 
 ## 网站头像与图标
 
-品牌头像采用浅绿底、深绿笑脸饭碗和嫩芽，应用于登录页、侧栏、建档页、浏览器标签和移动端主屏幕。内置 image_gen 生成的原图保存在 `assets/xiaofan-avatar.png`，完整提示词在 `assets/xiaofan-avatar-prompt.txt`；`npm run icons:build` 生成 512px/192px 图标、180px Apple touch icon、32px PNG favicon 和 16/32/48px ICO。公开资源由白名单控制，Service Worker 缓存版本同步升级。
+品牌头像采用浅绿底、深绿笑脸饭碗和嫩芽，应用于发现页、侧栏、建档页、浏览器标签和移动端主屏幕。内置 image_gen 生成的原图保存在 `assets/xiaofan-avatar.png`，完整提示词在 `assets/xiaofan-avatar-prompt.txt`；`npm run icons:build` 生成 512px/192px 图标、180px Apple touch icon、32px PNG favicon 和 16/32/48px ICO。公开资源由白名单控制，Service Worker 缓存版本同步升级。
 
 菜单完整条目仍保留；单次菜单的营养排序最多比较前12个符合偏好的条目，批量餐馆查询限制营养计算数量，未计算部分显示待确认，不编造热量。

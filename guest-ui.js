@@ -1,9 +1,9 @@
-// Public examples never read account caches or invoke product APIs.
+// Public examples do not read personal caches or create a device until use starts.
 (()=>{
   const home=document.getElementById('guestHome');
   home.addEventListener('click',event=>{
-    const action=event.target.closest('[data-login-purpose]');
-    if(action){window.XiaofanAccount.requireLogin(action.dataset.loginPurpose);return}
+    const action=event.target.closest('[data-start-product]');
+    if(action){window.XiaofanDevice.start();return}
     const filter=event.target.closest('[data-guest-filter]');
     if(!filter)return;
     for(const button of home.querySelectorAll('[data-guest-filter]'))button.setAttribute('aria-pressed',String(button===filter));
