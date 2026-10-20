@@ -39,6 +39,7 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     const burger=await call('/api/nutrition/search?q='+encodeURIComponent('汉堡'),{cookie});assert.equal(burger.status,200);assert.equal(burger.data.result.id,'fdc:2706920');assert.equal(burger.data.needsClarification,false);assert.deepEqual(burger.data.candidates,[]);
     const leg=await call('/api/nutrition/search?q='+encodeURIComponent('鸡腿汉堡'),{cookie});assert.equal(leg.status,200);assert.equal(leg.data.result.id,'fdc:2707000');assert.match(leg.data.result.matchNote,/未区分鸡腿/);
     const avocado=await call('/api/nutrition/search?q='+encodeURIComponent('牛油果'),{cookie});assert.equal(avocado.status,200);assert.match(avocado.data.result.originalName,/avocado/i);assert.ok(avocado.data.trace.includes('offline_chinese_search'));
+    const missing=await call('/api/nutrition/resolve?q='+encodeURIComponent('完全未收录的测试餐食'),{cookie});assert.equal(missing.status,404);assert.match(missing.data.error,/中文检索词库/);assert.ok(!missing.data.trace.includes('model_translation_only'));
     const rice=await call('/api/nutrition/search?q='+encodeURIComponent('米饭'),{cookie});assert.equal(rice.status,200);assert.equal(rice.data.result.id,'fdc:168878');
     assert.equal((await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name IN ('foods','aliases','candidates')").first()).n,0);
     const official=await call('/api/nutrition/search?q=fdc:168878',{cookie});assert.equal(official.data.result.per100g.kcal,130);

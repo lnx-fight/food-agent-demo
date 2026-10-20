@@ -75,7 +75,7 @@ export function offlineChineseFoodQuery(value){
   return [...new Set(translated.join(' ').split(/\s+/))].join(' ');
 }
 
-export async function resolveAuthoritativeNutrition(db,query,{translate,limit=50}={}){
+export async function resolveAuthoritativeNutrition(db,query,{limit=50}={}){
   const text=String(query||'').trim().slice(0,200),trace=['usda_downloaded_dataset'];
   const answer=(nutrition,question='',extra={})=>({nutrition,candidates:[],needsClarification:false,question,source:nutrition?'authoritative_database':'unmatched',trace,...extra});
   if(!text)return answer(null);
@@ -94,12 +94,7 @@ export async function resolveAuthoritativeNutrition(db,query,{translate,limit=50
   if(/[\p{Script=Han}]/u.test(text)){
     const offline=offlineChineseFoodQuery(text);
     if(offline){queries=[offline];trace.push('offline_chinese_search')}
-    else{
-      if(!translate)return answer(null,'暂未收录这个中文名称，请补充具体食物、生熟状态或英文名称。');
-      let translated;try{translated=await translate(text)}catch{return answer(null,'中文名称转换暂不可用，请尝试更具体的名称或英文名称。')}
-      queries=(Array.isArray(translated?.queries)?translated.queries:[]).filter(q=>typeof q==='string'&&/^[a-zA-Z0-9 ,()'-]{2,100}$/.test(q)).slice(0,1);
-      trace.push('model_translation_only');
-    }
+    else return answer(null,'中文检索词库暂未覆盖这个名称，请补充更具体的餐食名、英文原名或 FDC 编号。');
   }
 
   const ranked=[];

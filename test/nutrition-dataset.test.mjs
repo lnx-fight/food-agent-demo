@@ -68,13 +68,12 @@ test('复合中文菜不会被单一食材覆盖；英文全文检索自动选�
   const english=await resolveAuthoritativeNutrition(db,'chicken breast');assert.ok(english.nutrition);assert.equal(english.needsClarification,false);assert.equal(english.nutrition.matchType,'usda_search_reference');
 });
 
-test('模型仅翻译检索词，即使返回虚构热量或FDC编号也不能进入营养结果',async()=>{
-  const result=await resolveAuthoritativeNutrition(db,'测试中文食品',{translate:async()=>({queries:['hamburger'],kcal:1,fdcId:999999})});
-  assert.ok(result.nutrition);assert.equal(result.nutrition.confidence,'medium');
-  for(const candidate of [result.nutrition]){assert.notEqual(candidate.per100g.kcal,1);assert.notEqual(candidate.id,'fdc:999999');assert.match(candidate.source.type,/USDA/)}
-  for(const translation of [{queries:['汉堡']},{queries:['DROP TABLE; --']},{queries:['fdc:123']},{queries:[]}]){
-    assert.equal((await resolveAuthoritativeNutrition(db,'测试中文食品',{translate:async()=>translation})).nutrition,null);
-  }
+test('全部营养检索使用统一中文层，未收录名称不再调用模型转换',async()=>{
+  let called=false;
+  const result=await resolveAuthoritativeNutrition(db,'测试中文食品',{translate:async()=>{called=true;return {queries:['hamburger'],kcal:1,fdcId:999999}}});
+  assert.equal(called,false);assert.equal(result.nutrition,null);assert.equal(result.source,'unmatched');
+  assert.match(result.question,/中文检索词库暂未覆盖/);assert.deepEqual(result.candidates,[]);
+  assert.ok(!result.trace.includes('model_translation_only'));
 });
 
 test('常见中文整餐名称离线定位 USDA，不依赖模型额度；不把水果匹配成果奶或豌豆匹配成花生',async()=>{
