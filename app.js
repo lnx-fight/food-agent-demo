@@ -294,7 +294,7 @@ function prepareMealRecordForm(date=''){
 function openMealRecord(date=localDateKey(),type=mealTypeByTime()){
   setActiveMealType(type);const form=$('#manualMealForm');form.reset();delete form.dataset.editingId;clearMealNutritionState(form);form.elements.type.value=type;prepareMealRecordForm(date);form.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';openModal('manualMealModal');
 }
-function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference','nutritionSourceUrl','referenceLabel','lookupToken'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1'}
+function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference','nutritionSourceUrl','referenceLabel','lookupToken'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1';$('#nutritionLookupStatus').textContent=''}
 function daysBetween(a,b){ return Math.max(1,Math.ceil((new Date(b)-new Date(a))/86400000)); }
 function calculateProfile(profile){
   const h=profile.height/100;

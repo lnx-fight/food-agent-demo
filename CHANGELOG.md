@@ -30,7 +30,7 @@
 
 - 按要求移除当前 USDA 快照、中文映射、下载原包与导入脚本，将唯一内置营养源切换为台湾食药署官方 CSV：2,213 个食品条目、230,152 条营养分析明细。保存原始 ZIP、SHA-256、原名/俗名、样品描述、单位和样本信息，依据政府资料开放授权条款第1版展示署名、来源与授权链接。新增 OpenCC 简繁转换和经核对的地区名称别名；新查询仅使用食药署，旧FDC编号提示已停用。
 - 新增 `0007_tfda_schema.sql`、22份 `0008_tfda_snapshot_*.sql` 和 `0009_tfda_activate.sql`：完整导入并校验数量后才删除 USDA 表与FTS，营养明细按食品聚合保存以控制免费D1写入量。当前树移除旧 `0004_usda_snapshot.sql` 数据文件，既有D1已执行记录及其余历史迁移保留；本地升级前已备份。账号、密码、饮食/体重/对话等用户数据保留，历史摄入及旧USDA来源不重算。
-- 主要文件：`data/tfda/`、`scripts/import-tfda.py`、`scripts/tfda-labels.mjs`、`nutrition-names.mjs`、`nutrition-dataset.mjs`、`server.mjs`、新迁移、`app.js`、`index.html`、样式与缓存、发布/备份脚本、营养与D1测试、Skill数据规则和 README。营养结果新增完整指标展开；图片、DIY、菜单、文字记录与Agent营养Tool共用新库。摘要优先官方修正热量，保留原热量及缺失值；白饭182 kcal/100g是本快照原值，不套用旧USDA数值。
+- 主要文件：`data/tfda/`、`scripts/import-tfda.py`、`scripts/tfda-labels.mjs`、`nutrition-names.mjs`、`nutrition-dataset.mjs`、`server.mjs`、新迁移、`app.js`、`index.html`、样式与缓存、发布/备份脚本、营养与D1测试、Skill数据规则和 README。营养结果新增完整指标展开，重新打开/修改餐食时清除过期的查询结果；图片、DIY、菜单、文字记录与Agent营养Tool共用新库。摘要优先官方修正热量，保留原热量及缺失值；白饭182 kcal/100g是本快照原值，不套用旧USDA数值。
 - 限制：该快照包含食材、加工食品和部分成品，未收录回锅肉、牛肉汉堡等时明确返回未匹配；不将麻婆酱、汉堡面包/肉饼或冷冻炒饭当作其他整道菜。切换后旧代码不能单独回滚，需修复前进或同步恢复对应食品库。
 - 验证：107项Node/workerd回归、5项导入测试、30条评测结构校验及Pages构建通过；覆盖原账号/历史摄入保留、部分导入拒绝激活、简繁体与别名、完整明细/单位/缺失值、分类适配与食谱计算、未收录整菜不误配。隔离浏览器完成查询、展开104项明细及保存TFDA来源记餐验证；对比本地迁移前后用户、饮食和体重数量一致。
 
