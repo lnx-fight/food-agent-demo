@@ -13,14 +13,14 @@ const result=spawnSync(npx,args,{stdio:'inherit',env});
 if(result.error)throw result.error;
 if(result.status!==0)process.exit(result.status??1);
 // Verify the deployed API and D1 binding, including the expected data snapshot.
-const manifest=JSON.parse(readFileSync(new URL('../data/usda/manifest.json',import.meta.url),'utf8'));
+const manifest=JSON.parse(readFileSync(new URL('../data/tfda/manifest.json',import.meta.url),'utf8'));
 const url=`https://${project.projectName}.pages.dev/api/health`;
 let failure;
 for(let attempt=0;attempt<12;attempt++){
   try{
     const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(15000)}),data=await response.json();
-    if(!response.ok||data.ok!==true||data.foodCount!==0||data.nutritionSource!=='USDA'||data.authoritativeFoodCount!==manifest.totalRows)throw new Error(`Health check failed: HTTP ${response.status}`);
-    console.log(`Verified ${url}: Retired Chinese foods=${data.foodCount}, USDA foods=${data.authoritativeFoodCount}`);
+    if(!response.ok||data.ok!==true||data.foodCount!==0||data.nutritionSource!=='TFDA'||data.authoritativeFoodCount!==manifest.totalRows||data.nutrientRecordCount!==manifest.nutrientRows)throw new Error(`Health check failed: HTTP ${response.status}`);
+    console.log(`Verified ${url}: Retired Chinese foods=${data.foodCount}, TFDA foods=${data.authoritativeFoodCount}, nutrient records=${data.nutrientRecordCount}`);
     failure=null;break;
   }catch(error){failure=error;await new Promise(resolve=>setTimeout(resolve,5000))}
 }

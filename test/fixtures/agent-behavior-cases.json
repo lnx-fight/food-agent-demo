@@ -176,7 +176,7 @@
     "nutrition_not_found": {
       "tool": "search_nutrition",
       "ok": true,
-      "result": {"nutrition": null, "source": "unmatched", "trace": ["local_miss", "usda_miss", "official_web_miss"]}
+      "result": {"nutrition": null, "source": "unmatched", "trace": ["tfda_downloaded_dataset", "tfda_miss"]}
     },
     "restaurant_single_search": {
       "tool": "search_nearby_restaurants",

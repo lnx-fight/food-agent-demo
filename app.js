@@ -44,7 +44,7 @@ function nutritionLevelShort(level='low'){
   return ({high:'来源可靠',medium:'近似匹配',low:'待核验估算'})[level]||'待核验估算';
 }
 function nutritionLevelNote(level='low'){
-  return ({high:'USDA 匹配到对应食品的营养数据；份量仍按常见外食估算，误差较小',medium:'热量按 USDA 对应食品和估计份量计算，用油、酱汁和实际食用量可能造成偏差',low:'USDA 未找到对应食品的可靠数据，请补充信息，暂不自动估算'})[level]||'热量为估算，实际以实物为准';
+  return ({high:'食药署匹配到对应食品；份量仍为估计，请核对实际配方和食用量',medium:'热量按食药署对应食品和估计份量计算，用油、酱汁和实际食用量可能造成偏差',low:'食药署未找到对应食品的可靠数据，请补充信息，暂不自动估算'})[level]||'热量为估算，实际以实物为准';
 }
 function normalizeDisplayedDecimals(root=document.body){if(!root)return;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);for(const node of nodes){if(['SCRIPT','STYLE'].includes(node.parentElement?.tagName))continue;const next=node.nodeValue.replace(/-?\d+\.\d{3,}/g,value=>formatNumber(value));if(next!==node.nodeValue)node.nodeValue=next}}
 new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>normalizeDisplayedDecimals(node.nodeType===Node.TEXT_NODE?node.parentElement:node)))).observe(document.body,{childList:true,subtree:true});document.addEventListener('change',event=>{if(event.target.matches('input[type="number"]')&&event.target.value!==''){const value=Number(event.target.value);if(Number.isFinite(value))event.target.value=formatNumber(value)}});
@@ -116,14 +116,14 @@ $('#generateRecipeBtn').addEventListener('click',async()=>{
     const mealType=suggestedMealType(),futureDay=state.activeMealDayOffset===1,pantry=$$('input[name="diyPantry"]:checked').map(input=>input.value),d=await apiFetch('/api/recipes/diy',{method:'POST',body:JSON.stringify({ingredients:state.ingredients,pantry,customFoods:[...diyCustomFoods.values()],cookTime:$('#cookTime').value,cookTools:$('#cookTools').value,mealType,dayOffset:futureDay?1:0,profile:userData?.profile||{},today:futureDay?{calories:0,protein:0,meals:[]}:{calories:state.calories,protein:state.protein,meals:todayMeals()}})}),r=d.result.recipe,n=r.nutrition,targets=d.result.targets,source=DEMO_MODE?'预置演示方案':d.result.generatedBy==='qwen'?'千问规划＋数据库校验':'规则规划＋数据库校验';
     addToolEvent('compose_home_recipe',`${source} · 匹配${d.result.matched.length}种食材`);addToolEvent('calculate_recipe_nutrition',`${n.kcal} kcal`);
     const ingredients=(r.ingredients||[]).map(x=>`<li>${escapeHtml(x.name)} ${x.grams}g <small>· ${x.kcal} kcal</small></li>`).join(''),steps=(r.steps||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('');
-    const targetNotice=targets.budgetStatus==='exhausted'?`${mealDayLabel()}理论参考已超出；按正常${escapeHtml(targets.mealType)}提供约 ${targets.mealKcal} kcal 的参考，不以跳餐或 0 热量餐补偿`:`${mealDayLabel()}${escapeHtml(targets.mealType)}动态预算约 ${targets.mealKcal} kcal`;out.innerHTML=`<div class="lookup-status ${targets.budgetStatus==='normal'?'success':'warning'}">${targetNotice}<span class="api-source">全天 ${targets.dailyTarget} kcal · 已摄入 ${targets.consumedKcal} kcal${targets.budgetStatus==='exhausted'?' · 不把今天的偏差转成明日热量债务':` · 为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal`}</span></div><div class="recipe-result"><div class="recipe-cover"><div><small>真实食材匹配 · ${escapeHtml(source)}</small><h3>${escapeHtml(r.name)}</h3><p>使用现有食材 · 预计${Number(r.minutes)||20}分钟</p></div><span>约 ${n.kcal} kcal</span></div><div class="recipe-body"><div class="recipe-macros"><span>蛋白质 ${n.protein}g</span><span>碳水 ${n.carbs}g</span><span>脂肪 ${n.fat}g</span></div><div class="recipe-columns"><div><h4>食材与克数</h4><ul>${ingredients}</ul></div><div><h4>烹饪步骤</h4><ol>${steps}</ol></div></div><div class="confirm-row"><strong>加入${mealDayLabel()}${escapeHtml(targets.mealType)}</strong><button id="acceptRecipe">采用这份食谱</button></div></div></div>`;
+    const targetNotice=targets.budgetStatus==='exhausted'?`${mealDayLabel()}理论参考已超出；按正常${escapeHtml(targets.mealType)}提供约 ${targets.mealKcal} kcal 的参考，不以跳餐或 0 热量餐补偿`:`${mealDayLabel()}${escapeHtml(targets.mealType)}动态预算约 ${targets.mealKcal} kcal`;out.innerHTML=`<div class="lookup-status ${targets.budgetStatus==='normal'?'success':'warning'}">${targetNotice}<span class="api-source">全天 ${targets.dailyTarget} kcal · 已摄入 ${targets.consumedKcal} kcal${targets.budgetStatus==='exhausted'?' · 不把今天的偏差转成明日热量债务':` · 为${targets.futureMeals.join('、')||'后续'}预留 ${targets.reservedKcal} kcal`}</span></div><div class="recipe-result"><div class="recipe-cover"><div><small>真实食材匹配 · ${escapeHtml(source)}</small><h3>${escapeHtml(r.name)}</h3><p>使用现有食材 · 预计${Number(r.minutes)||20}分钟</p></div><span>约 ${n.kcal} kcal</span></div><div class="recipe-body"><div class="recipe-macros"><span>蛋白质 ${n.protein==null?'未知':n.protein+'g'}</span><span>碳水 ${n.carbs==null?'未知':n.carbs+'g'}</span><span>脂肪 ${n.fat==null?'未知':n.fat+'g'}</span></div><div class="recipe-columns"><div><h4>食材与克数</h4><ul>${ingredients}</ul></div><div><h4>烹饪步骤</h4><ol>${steps}</ol></div></div><div class="confirm-row"><strong>加入${mealDayLabel()}${escapeHtml(targets.mealType)}</strong><button id="acceptRecipe">采用这份食谱</button></div></div></div>`;
     $('#acceptRecipe').onclick=()=>acceptMeal(r.name,n.kcal,n.protein,'DIY真实食谱',targets.mealType);
   }catch(e){const missing=e.data?.unmatched||[];if(missing.length){out.innerHTML=`<div class="lookup-status warning">${escapeHtml(e.message)}</div><form id="manualDiyNutrition"><p>请填写包装标签或可靠来源中的每100g营养值：</p>${missing.map((name,i)=>`<fieldset><legend>${escapeHtml(name)}</legend><div class="form-row"><label>热量 kcal<input type="number" name="kcal_${i}" min="0" max="1000" step="0.1" required></label><label>蛋白质 g<input type="number" name="protein_${i}" min="0" max="100" step="0.1" required></label></div><div class="form-row"><label>脂肪 g<input type="number" name="fat_${i}" min="0" max="100" step="0.1" required></label><label>碳水 g<input type="number" name="carbs_${i}" min="0" max="100" step="0.1" required></label></div></fieldset>`).join('')}<button class="primary-btn full" type="submit">使用这些数据重新生成</button><small>仅用于本次食谱，不会写入正式营养数据库。</small></form>`;$('#manualDiyNutrition').onsubmit=event=>{event.preventDefault();const formData=new FormData(event.currentTarget);missing.forEach((name,i)=>diyCustomFoods.set(name,{name,kcal:+formData.get(`kcal_${i}`),protein:+formData.get(`protein_${i}`),fat:+formData.get(`fat_${i}`),carbs:+formData.get(`carbs_${i}`)}));btn.click()}}else out.innerHTML=`<div class="lookup-status error">食谱生成失败：${escapeHtml(e.message)}</div>`}
   finally{btn.disabled=false;btn.textContent='✦ 重新规划'}
 });
 
 function acceptMeal(name,cal,protein,source,mealType=suggestedMealType()){
-  if(userData){const recordDate=state.activeMealDayOffset===1?localDateKey(new Date(Date.now()+86400000)):localDateKey();userData.mealLogs.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),date:recordDate,type:mealType,name,calories:cal,protein,source,createdAt:new Date().toISOString()});saveUser();rememberAgent('meal_confirmed',{name,calories:cal,protein,mealType,source})}
+  if(userData){const recordDate=state.activeMealDayOffset===1?localDateKey(new Date(Date.now()+86400000)):localDateKey();userData.mealLogs.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),date:recordDate,type:mealType,name,calories:cal,protein:protein??0,proteinKnown:protein!=null,source,createdAt:new Date().toISOString()});saveUser();rememberAgent('meal_confirmed',{name,calories:cal,protein,mealType,source})}
   else{state.calories+=cal;state.protein+=protein}
   if(mealType==='午餐'&&state.activeMealDayOffset===0)state.tasks.lunch=true;state.mealRequest='';state.activeMealType='';state.activeMealDayOffset=0;closeModals();if(userData)hydrateApp();else updateDashboard();
   const empty=$('.meal-row.empty');if(empty){empty.classList.remove('empty');empty.innerHTML=`<span class="meal-emoji lunch">◐</span><div><strong>${mealType}</strong><p>${name} · ${source}</p></div><span><strong>${cal}</strong><small>kcal</small></span><button>›</button>`}
@@ -459,7 +459,7 @@ $('#manualMealForm').addEventListener('submit',e=>{
     const changed=['name','calories','protein','amount','unit'].some(key=>existing[key]!==log[key]);
     if(changed){for(const key of ['nutritionSource','nutritionSourceUrl','referenceId','referenceLabel'])delete existing[key];existing.proteinKnown=e.target.elements.protein.value!==''}else log.source=existing.source;
   }
-  if(e.target.dataset.nutritionSource==='USDA')Object.assign(log,{nutritionSource:'USDA',nutritionSourceUrl:e.target.dataset.nutritionSourceUrl,referenceId:e.target.dataset.matchedReference,referenceLabel:e.target.dataset.referenceLabel,proteinKnown:e.target.dataset.proteinPer100!==''});
+  if(e.target.dataset.nutritionSource==='TFDA')Object.assign(log,{nutritionSource:'TFDA',nutritionSourceUrl:e.target.dataset.nutritionSourceUrl,referenceId:e.target.dataset.matchedReference,referenceLabel:e.target.dataset.referenceLabel,proteinKnown:e.target.dataset.proteinPer100!==''});
   if(existing)Object.assign(existing,log);else userData.mealLogs.push(log);state.mealHistoryDate=date;saveUser();rememberAgent('meal_confirmed',{name:log.name,calories:log.calories,protein:log.protein,mealType:log.type,source:log.source});e.target.reset();delete e.target.dataset.editingId;clearMealNutritionState(e.target);e.target.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';state.activeMealType='';state.activeMealDayOffset=0;closeModals();hydrateApp();addTrace('✓',`${editingId?'修改':isBackfill?'补登':'记录'}${dateDisplay(date)}饮食`,'save_meal_log',`${log.name} · ${log.amount||'?'}${log.unit==='serving'?'份':log.unit} · ${log.calories} kcal`);showToast(`${dateDisplay(date)}饮食已${editingId?'修改':'保存'}${isBackfill&&!editingId?'（补登）':''}`);
 });
 
@@ -600,7 +600,7 @@ adjustGoalForm.elements.targetWeight.addEventListener('input',updateAdjustGoalPr
 adjustGoalForm.addEventListener('submit',e=>{e.preventDefault();if(!userData||!e.target.reportValidity())return;const old={targetWeight:userData.profile.targetWeight,targetDate:userData.profile.targetDate},targetWeight=+e.target.elements.targetWeight.value,targetDate=e.target.elements.targetDate.value;userData.goalHistory=userData.goalHistory||[];userData.goalHistory.push({...old,changedAt:new Date().toISOString()});userData.profile.targetWeight=targetWeight;userData.profile.targetDate=targetDate;saveUser();closeModals();hydrateApp();const days=daysBetween(localDateKey(),targetDate);addTrace('↻','目标计划已调整','replan_weight_goal',`目标 ${targetWeight.toFixed(1)} kg · 新周期 ${days} 天`);showToast(`目标已更新，Agent已按${days}天重新规划`)});
 
 // --- Real backend integrations ---
-let serviceStatus={qwen:false,usda:false,amap:false,openFoodFacts:false};
+let serviceStatus={qwen:false,tfda:false,amap:false,openFoodFacts:false};
 const portionForm=$('#manualMealForm'),portionInput=portionForm.elements.grams,portionLabel=portionInput.closest('label'),portionControl=document.createElement('div'),portionUnit=document.createElement('select');
 portionUnit.name='unit';portionUnit.setAttribute('aria-label','份量单位');portionUnit.innerHTML='<option value="g">g</option><option value="ml">ml</option><option value="serving">份</option>';portionControl.className='portion-control';portionControl.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:end';portionInput.replaceWith(portionControl);portionControl.append(portionInput,portionUnit);portionLabel.firstChild.textContent='大约份量';
 $('#manualMealForm').elements.protein.step='0.1';
@@ -637,18 +637,18 @@ function demoAgentReply(payload={}){
 async function demoApi(url,options={}){
   await new Promise(resolve=>setTimeout(resolve,120));
   const path=String(url).split('?')[0],payload=demoPayload(options),now=new Date().toISOString();
-  if(path==='/api/health')return {ok:true,demo:true,services:{qwen:false,usda:false,amap:false,openFoodFacts:false}};
+  if(path==='/api/health')return {ok:true,demo:true,services:{qwen:false,tfda:false,amap:false,openFoodFacts:false}};
   if(path==='/api/user/state')return {ok:true,state:null};
   if(path==='/api/agent/memory')return {ok:true,demo:true};
   if(path==='/api/agent/check')return {ok:true,tasks:[]};
   if(path==='/api/agent/review')return {ok:true,result:{adjustment:0,decidedBy:'demo',message:'面试演示模式不修改预算'}};
   if(path==='/api/agent/logs')return {ok:true,logs:[{kind:'agent_skill',detail:'next-meal-decision:demo-ready',createdAt:now},{kind:'agent_tool',detail:'read_user_state:ok',createdAt:now},{kind:'agent_tool',detail:'get_meal_budget:ok',createdAt:now},{kind:'agent_chat_done',detail:'预置演示流程完成',createdAt:now}]};
-  if(path==='/api/recipes/diy')throw new Error('请登录后使用 USDA 食材数据生成食谱。');
+  if(path==='/api/recipes/diy')throw new Error('请登录后使用食药署食材数据生成食谱。');
   if(path==='/api/plans/daily-meals')return {ok:true,result:demoDailyPlan(payload)};
   if(path==='/api/plans/weekly')return {ok:true,result:demoNaturalWeek(payload),trace:['demo_natural_week']};
   if(path==='/api/menus/parse')return {ok:true,result:demoMenuParse(payload),trace:['demo_full_menu_parse']};
   if(path==='/api/agent/chat')return {ok:true,result:demoAgentReply(payload)};
-  if(path==='/api/meals/analyze'||path.startsWith('/api/nutrition/'))throw new Error('请登录后查询真实 USDA 数据；演示模式不提供预置营养值。');
+  if(path==='/api/meals/analyze'||path.startsWith('/api/nutrition/'))throw new Error('请登录后查询食药署数据；演示模式不提供预置营养值。');
   if(path==='/api/location/geocode')return {ok:true,result:{lat:31.2304,lng:121.4737,formattedAddress:`${new URL(String(url),location.origin).searchParams.get('address')||'演示地点'}（预置坐标）`}};
   if(path==='/api/restaurants/nearby')return {ok:true,results:[{name:'轻食实验室',address:'演示路 88 号',distance:420,location:'121.4737,31.2304'},{name:'谷物食堂',address:'演示路 126 号',distance:680,location:'121.4737,31.2304'},{name:'暖碗餐吧',address:'演示路 208 号',distance:930,location:'121.4737,31.2304'}]};
   if(path==='/api/restaurants/recommendations')return {ok:true,...demoRestaurants(payload)};
@@ -662,28 +662,38 @@ async function apiFetch(url,options={}){
 async function checkServices(){try{const d=await apiFetch('/api/health');serviceStatus=d.services;return d}catch{return null}}
 checkServices();
 
-async function lookupUsdaNutrition(query){
+async function lookupDatasetNutrition(query){
   const form=$('#manualMealForm'),status=$('#nutritionLookupStatus');
   clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';
-  status.className='lookup-status loading';status.textContent='正在检索 USDA 权威营养数据…';addToolEvent('search_usda_dataset',query);
+  status.className='lookup-status loading';status.textContent='正在检索食药署食品营养数据…';addToolEvent('search_tfda_dataset',query);
   const lookupToken=String(Date.now())+Math.random();form.dataset.lookupToken=lookupToken;
   try{
     const data=await apiFetch(`/api/nutrition/search?q=${encodeURIComponent(query)}`);
     if(form.dataset.lookupToken!==lookupToken)return;
     const food=data.result,n=food.per100g;
     form.elements.name.value=food.name;form.elements.unit.value='g';
-    form.dataset.kcalPer100=n.kcal;form.dataset.proteinPer100=n.protein??'';form.dataset.nutritionBasis='100g';form.dataset.nutritionSource='USDA';form.dataset.matchedReference=food.id;form.dataset.nutritionSourceUrl=food.source.url;form.dataset.referenceLabel=food.name;
+    form.dataset.kcalPer100=n.kcal;form.dataset.proteinPer100=n.protein??'';form.dataset.nutritionBasis='100g';form.dataset.nutritionSource='TFDA';form.dataset.matchedReference=food.id;form.dataset.nutritionSourceUrl=food.source.url;form.dataset.referenceLabel=food.name;
     recalculateBarcodeNutrition();
-    status.className='lookup-status success';status.innerHTML=`✓ ${escapeHtml(food.name)}：${n.kcal} kcal/100g<span class="api-source">原名：${escapeHtml(food.originalName||food.name)}${food.matchNote?`<br>${escapeHtml(food.matchNote)}`:''}<br><a href="${escapeHtml(food.source.url)}" target="_blank" rel="noopener noreferrer">USDA · ${escapeHtml(food.id)}</a> · 按每100g可食部计算，请核对实际份量和配方</span>`;
+    status.className='lookup-status success';status.innerHTML=`✓ ${escapeHtml(food.name)}：${n.kcal} kcal/100g<span class="api-source">原名：${escapeHtml(food.originalName||food.name)}${food.matchNote?`<br>${escapeHtml(food.matchNote)}`:''}<br>样品说明：${escapeHtml(food.description||'无')}<br>能量口径：${escapeHtml(food.energyBasis||'未知')}<br><a href="${escapeHtml(food.source.url)}" target="_blank" rel="noopener noreferrer">台湾食药署 · ${escapeHtml(food.id)}</a> · 按每100g可食部计算，请核对实际份量和配方<br>${escapeHtml(food.source.attribution)} <a href="${escapeHtml(food.source.licenseUrl)}" target="_blank" rel="noopener noreferrer">授权条款</a></span><details class="nutrition-details"><summary>查看全部 ${food.nutrientCount} 项营养明细</summary><div class="nutrition-detail-content"></div></details>`;
+    const details=status.querySelector('details');
+    details.addEventListener('toggle',async()=>{
+      if(!details.open||details.dataset.loaded)return;
+      const content=details.querySelector('div');content.textContent='正在读取完整营养明细…';
+      try{
+        const result=(await apiFetch(`/api/nutrition/details?q=${encodeURIComponent(food.id)}`)).result;
+        content.innerHTML=`<table><thead><tr><th>营养指标</th><th>每100克含量</th></tr></thead><tbody>${result.records.map((row,i)=>`<tr><td>${escapeHtml(result.displayNames[i])}</td><td>${escapeHtml(row[3]===''?'未知':row[3])}${row[3]===''?'':` ${escapeHtml(row[2])}`}</td></tr>`).join('')}</tbody></table>`;
+        details.dataset.loaded='1';
+      }catch(error){content.textContent=error.message}
+    });
   }catch(error){
     if(form.dataset.lookupToken!==lookupToken)return;
-    status.className='lookup-status warning';status.textContent=error.data?.question||error.message||'USDA 未找到合适记录，请补充具体名称或手动填写包装营养信息。';
+    status.className='lookup-status warning';status.textContent=error.data?.question||error.message||'食药署未找到合适记录，请补充具体名称或手动填写包装营养信息。';
   }
 }
-$('#lookupNutritionBtn').addEventListener('click',()=>{const name=$('#manualMealForm').elements.name.value.trim();if(name)lookupUsdaNutrition(name);else{$('#nutritionLookupStatus').textContent='请先填写食物名称'}});
+$('#lookupNutritionBtn').addEventListener('click',()=>{const name=$('#manualMealForm').elements.name.value.trim();if(name)lookupDatasetNutrition(name);else{$('#nutritionLookupStatus').textContent='请先填写食物名称'}});
 function recalculateBarcodeNutrition(){const form=$('#manualMealForm'),amount=+form.elements.grams.value||0,kcal=Number(form.dataset.kcalPer100),protein=Number(form.dataset.proteinPer100);form.elements.calories.value=form.dataset.kcalPer100===''?'':Math.round(kcal*amount/100);form.elements.protein.value=form.dataset.proteinPer100===''?'':(protein*amount/100).toFixed(1)}
 $('#manualMealForm').elements.grams.addEventListener('input',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
-$('#manualMealForm').elements.unit.addEventListener('change',()=>{const form=$('#manualMealForm');if(form.dataset.nutritionBasis&&form.elements.unit.value!=='g'){clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';$('#nutritionLookupStatus').textContent='USDA 数据按克计算，改用其他单位后请手动填写营养值。'}});
+$('#manualMealForm').elements.unit.addEventListener('change',()=>{const form=$('#manualMealForm');if(form.dataset.nutritionBasis&&form.elements.unit.value!=='g'){clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';$('#nutritionLookupStatus').textContent='食药署数据按克计算，改用其他单位后请手动填写营养值。'}});
 $('#manualMealForm').elements.name.addEventListener('input',()=>{const form=$('#manualMealForm');clearMealNutritionState(form);$('#nutritionLookupStatus').textContent='';form.elements.calories.value='';form.elements.protein.value=''});
 for(const field of ['calories','protein'])$('#manualMealForm').elements[field].addEventListener('input',()=>clearMealNutritionState($('#manualMealForm')));
 

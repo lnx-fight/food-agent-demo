@@ -25,7 +25,7 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
       const statements=sqlStatements(sql);
       for(let i=0;i<statements.length;i+=40)await db.batch(statements.slice(i,i+40).map(sql=>db.prepare(sql)));
     }
-    const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,13588);
+    const health=await call('/api/health');assert.equal(health.data.foodCount,0);assert.equal(health.data.authoritativeFoodCount,2213);
     assert.equal((await call('/api/user/state')).status,401);
     const alice=await call('/api/auth/login',{body:{username:'alice',password}});
     assert.equal(alice.status,201,JSON.stringify(alice.data));
@@ -36,14 +36,15 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     const again=await call('/api/auth/login',{body:{username:'alice',password}});assert.equal(again.status,200);assert.equal(again.data.account.id,alice.data.account.id);
     const race=await Promise.all([password,password+'other'].map(value=>call('/api/auth/login',{body:{username:'first_signin',password:value}})));assert.deepEqual(race.map(item=>item.status).sort(),[201,401]);assert.equal((await db.prepare("SELECT COUNT(*) n FROM accounts WHERE username='first_signin'").first()).n,1);
     assert.equal((await call('/api/auth/login',{body:{username:'alice',password:'wrong password'}})).status,401);
-    const dataset=await call('/api/nutrition/dataset-search?q=rice%20cooked',{cookie});assert.equal(dataset.status,200);assert.ok(dataset.data.results.length>0);
-    const burger=await call('/api/nutrition/search?q='+encodeURIComponent('汉堡'),{cookie});assert.equal(burger.status,200);assert.equal(burger.data.result.id,'fdc:2706920');assert.equal(burger.data.needsClarification,false);assert.deepEqual(burger.data.candidates,[]);
-    const leg=await call('/api/nutrition/search?q='+encodeURIComponent('鸡腿汉堡'),{cookie});assert.equal(leg.status,200);assert.equal(leg.data.result.id,'fdc:2707000');assert.match(leg.data.result.matchNote,/未区分鸡腿/);
-    const avocado=await call('/api/nutrition/search?q='+encodeURIComponent('牛油果'),{cookie});assert.equal(avocado.status,200);assert.match(avocado.data.result.originalName,/avocado/i);assert.ok(avocado.data.trace.includes('offline_chinese_search'));
-    const missing=await call('/api/nutrition/resolve?q='+encodeURIComponent('完全未收录的测试餐食'),{cookie});assert.equal(missing.status,404);assert.match(missing.data.error,/中文检索词库/);assert.ok(!missing.data.trace.includes('model_translation_only'));
-    const rice=await call('/api/nutrition/search?q='+encodeURIComponent('米饭'),{cookie});assert.equal(rice.status,200);assert.equal(rice.data.result.id,'fdc:168878');
-    assert.equal((await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name IN ('foods','aliases','candidates')").first()).n,0);
-    const official=await call('/api/nutrition/search?q=fdc:168878',{cookie});assert.equal(official.data.result.per100g.kcal,130);
+    assert.equal(health.data.nutritionSource,'TFDA');assert.equal(health.data.nutrientRecordCount,230152);
+    const dataset=await call('/api/nutrition/dataset-search?q='+encodeURIComponent('肉粽'),{cookie});assert.equal(dataset.status,200);assert.ok(dataset.data.results.length>0);
+    const zongzi=await call('/api/nutrition/search?q='+encodeURIComponent('肉粽'),{cookie});assert.equal(zongzi.status,200);assert.equal(zongzi.data.result.id,'tfda:R0400101');assert.equal(zongzi.data.needsClarification,false);assert.deepEqual(zongzi.data.candidates,[]);
+    const frozen=await call('/api/nutrition/search?q='+encodeURIComponent('冷凍蝦仁炒飯'),{cookie});assert.equal(frozen.status,200);assert.equal(frozen.data.result.name,'冷冻虾仁炒饭');
+    for(const name of ['回锅肉','牛肉汉堡','虾仁炒饭'])assert.equal((await call('/api/nutrition/search?q='+encodeURIComponent(name),{cookie})).status,404,name);
+    const rice=await call('/api/nutrition/search?q='+encodeURIComponent('米饭'),{cookie});assert.equal(rice.status,200);assert.equal(rice.data.result.id,'tfda:A0550601');assert.equal(rice.data.result.per100g.kcal,182);
+    assert.equal((await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name IN ('foods','aliases','candidates','authoritative_foods','authoritative_foods_fts')").first()).n,0);
+    const detail=await call('/api/nutrition/details?q=tfda:A0550601',{cookie});assert.equal(detail.status,200);assert.equal(detail.data.result.records.length,104);
+    assert.equal((await call('/api/nutrition/search?q=fdc:168878',{cookie})).status,404);
     const loggedIn=await call('/api/auth/login',{body:{username:'alice',password}});
     assert.equal(loggedIn.status,200,JSON.stringify(loggedIn.data));
     const state={profile:{age:30,weight:70,height:170,targetWeight:65,targetDate:'2027-01-01'},mealLogs:[{id:'lunch',date:'2026-10-16',type:'午餐',name:'鸡蛋',calories:150,protein:12}],weightLogs:[{date:'2026-10-16',weight:70}]};

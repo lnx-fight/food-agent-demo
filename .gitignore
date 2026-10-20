@@ -20,6 +20,6 @@ dist/
 .cloudflare/
 .dev.vars
 data/downloads/
-data/usda/nutrition.csv
+
 __pycache__/
 *.pyc

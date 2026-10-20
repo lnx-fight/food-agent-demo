@@ -24,8 +24,6 @@ services:
         value: "true"
       - key: DASHSCOPE_API_KEY
         sync: false
-      - key: USDA_API_KEY
-        sync: false
       - key: AMAP_WEB_SERVICE_KEY
         sync: false
       - key: QWEN_VISION_MODEL

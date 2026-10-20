@@ -1,7 +1,7 @@
 import http from 'node:http';
 import {env,isCloudflare} from './runtime.mjs';
 import {atomic} from './database.mjs';
-import {USDA_TERMS,resolveAuthoritativeNutrition} from './nutrition-dataset.mjs';
+import {TFDA_TERMS,resolveAuthoritativeNutrition,authoritativeFoodDetails,NUTRITION_MANIFEST} from './nutrition-dataset.mjs';
 import {
   readFileSync,
   existsSync,
@@ -22,11 +22,11 @@ const ROOT=fileURLToPath(new URL('.',import.meta.url));
 const CN_TZ='Asia/Shanghai'; // 北京时间（中国标准时间 UTC+8；IANA 时区库中全中国统一使用 Asia/Shanghai）
 if(!isCloudflare)loadDotEnv(join(ROOT,'.env'));
 const PORT=Number(env.PORT||8080);
-// 本地 SQLite 保存 USDA 与用户状态；云端通过请求上下文使用 D1。
+// 本地 SQLite 保存 台湾食药署 与用户状态；云端通过请求上下文使用 D1。
 const SOURCE_DATA_DIR=join(ROOT,'data');
 const DATA_DIR=resolve(env.DATA_DIR||SOURCE_DATA_DIR);mkdirSync(DATA_DIR,{recursive:true});
 const db=new DatabaseSync(join(DATA_DIR,'nutrition.sqlite'));
-const FOOD_TERMS=USDA_TERMS;
+const FOOD_TERMS=TFDA_TERMS;
 if(!isCloudflare){
 db.exec('PRAGMA busy_timeout=5000');
 db.exec('PRAGMA journal_mode=WAL; PRAGMA secure_delete=ON');
@@ -58,19 +58,32 @@ function initDatabase(){
   const mealCols=db.prepare('PRAGMA table_info(meal_logs)').all().map(c=>c.name);
   if(!mealCols.includes('details')){try{db.exec("ALTER TABLE meal_logs ADD COLUMN details TEXT DEFAULT '{}'")}catch(error){if(!/duplicate column/i.test(String(error.message)))throw error}}
   if(!userCols.includes('app_state')){try{db.exec("ALTER TABLE users ADD COLUMN app_state TEXT DEFAULT '{}'")}catch(error){if(!/duplicate column/i.test(String(error.message)))throw error}}
-  // Bootstrap USDA once; published D1 migrations remain immutable.
-  if(!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='authoritative_foods'").get()){
+  // Migrate the food catalog atomically; account and confirmed-meal tables stay intact.
+  if(!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='nutrition_dataset'").get()){
     db.exec('BEGIN');
-    try{for(const file of ['0003_authoritative_foods.sql','0004_usda_snapshot.sql','0005_usda_search.sql'])db.exec(readFileSync(join(ROOT,'migrations',file),'utf8'));db.exec('COMMIT')}catch(error){db.exec('ROLLBACK');throw error}
+    try{
+      for(const file of ['0007_tfda_schema.sql',...NUTRITION_MANIFEST.snapshotMigrations,'0009_tfda_activate.sql'])db.exec(readFileSync(join(ROOT,'migrations',file),'utf8'));
+      db.exec('COMMIT');
+    }catch(error){db.exec('ROLLBACK');throw error}
   }
   db.exec(readFileSync(join(ROOT,'migrations/0006_usda_only.sql'),'utf8'));
 
 }
 function json(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data))}
 async function body(req,max=12_000_000){return new Promise((resolve,reject)=>{let size=0,s='';req.on('data',c=>{size+=c.length;if(size>max){reject(Object.assign(new Error('请求内容过大'),{status:413}));req.destroy();return}s+=c});req.on('end',()=>{try{const value=s?JSON.parse(s):{};if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();if(req.account)value.clientId=req.account.client_id;resolve(value)}catch{reject(Object.assign(new Error('JSON格式错误'),{status:400}))}});req.on('error',reject)})}
-async function usdaFoodRow(query){
+async function datasetFoodRow(query){
   const {nutrition}=await resolveNutrition(query);
-  return nutrition?{...nutrition,...nutrition.per100g,match_type:nutrition.matchType}:null;
+  return nutrition?{...nutrition,...nutrition.per100g,sourceCategory:nutrition.category,category:planningFoodCategory(nutrition),match_type:nutrition.matchType}:null;
+}
+function planningFoodCategory(food){
+  const category=String(food?.category||''),name=String(food?.name||'');
+  if(/谷物|淀粉/.test(category))return '主食';
+  if(/鱼贝/.test(category))return '水产';
+  if(/蛋类|乳品/.test(category))return '蛋奶';
+  if(/菇类|藻类/.test(category))return '蔬菜';
+  if(/豆类/.test(category)||(/加工调理/.test(category)&&/豆腐|豆干|豆皮|豆包/.test(name)))return '豆制品';
+  if(/饮料类/.test(category))return '饮品';
+  return category;
 }
 function normalizeFood(row){return row.per100g?row:{id:row.id,name:row.name,category:row.category,per100g:{kcal:row.kcal,protein:row.protein,fat:row.fat,carbs:row.carbs},source:{type:row.source,url:row.source_url||null,id:row.source_id||null},confidence:row.confidence,matchType:row.match_type||'user_provided'}}
 function candidateNutrition(candidate,name){
@@ -129,29 +142,29 @@ async function analyzeImage(imageDataUrl,context=''){
 }
 function imagePortionEstimate(item={},local=null){
   const positive=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?n:null},modelMin=positive(item.portionGramsMin),modelMax=positive(item.portionGramsMax),single=positive(item.portionGrams);if(modelMin||modelMax||single){const center=single||modelMin||modelMax,min=Math.round(modelMin||center*.85),max=Math.round(modelMax||center*1.15);return {portionGramsMin:Math.max(1,Math.min(min,max)),portionGramsMax:Math.max(min,max),portionBasis:String(item.portionBasis||'视觉份量估算'),portionConfidence:String(item.portionConfidence||item.confidence||'medium')}}
-  const name=String(item.name||''),category=String(local?.category||''),range=/油|酱/.test(name)?[5,15]:/饮品|饮料/.test(category)||/饮料|奶茶|咖啡|豆浆|牛奶/.test(name)?[250,500]:/蛋奶/.test(category)||/鸡蛋|鸭蛋/.test(name)?[50,100]:/肉类|水产|豆制品/.test(category)?[80,180]:/主食/.test(category)||/饭|面|粉|粥|薯|土豆/.test(name)?[100,220]:/蔬菜/.test(category)?[100,250]:/水果/.test(category)?[100,250]:[80,200];return {portionGramsMin:range[0],portionGramsMax:range[1],portionBasis:'按食物类别采用常见一人份',portionConfidence:'low'}
+  const name=String(item.name||''),category=planningFoodCategory(local),range=/油|酱/.test(name)?[5,15]:/饮品|饮料/.test(category)||/饮料|奶茶|咖啡|豆浆|牛奶/.test(name)?[250,500]:/蛋奶/.test(category)||/鸡蛋|鸭蛋/.test(name)?[50,100]:/肉类|水产|豆制品/.test(category)?[80,180]:/主食/.test(category)||/饭|面|粉|粥|薯|土豆/.test(name)?[100,220]:/蔬菜/.test(category)?[100,250]:/水果/.test(category)?[100,250]:[80,200];return {portionGramsMin:range[0],portionGramsMax:range[1],portionBasis:'按食物类别采用常见一人份',portionConfidence:'low'}
 }
 function fallbackRecipePlan(foods,cookTime){
   const portionFor=food=>/油/.test(food.name)?8:/主食/.test(food.category)?150:/肉类|水产/.test(food.category)?150:/蔬菜/.test(food.category)?200:/蛋奶/.test(food.category)?100:/豆制品/.test(food.category)?150:100;
-  const regular=foods.filter(food=>!/调味料/.test(food.category)),pick=pattern=>regular.find(food=>pattern.test(food.category)),selected=[pick(/肉类|水产|蛋奶|豆制品/),pick(/蔬菜/),pick(/主食/)].filter(Boolean);if(!selected.length&&regular.length)selected.push(regular[0]);const extra=regular.find(food=>!selected.includes(food));if(selected.length<3&&extra)selected.push(extra);const oil=foods.find(food=>food.name==='食用植物油'),ingredients=selected.map(food=>({name:food.name,grams:portionFor(food)}));if(oil&&selected.some(food=>/肉类|水产|蛋奶|豆制品|蔬菜/.test(food.category)))ingredients.push({name:oil.name,grams:5});
+  const regular=foods.filter(food=>!/调味料|油脂/.test(food.category)),pick=pattern=>regular.find(food=>pattern.test(food.category)),selected=[pick(/肉类|水产|蛋奶|豆制品/),pick(/蔬菜/),pick(/主食/)].filter(Boolean);if(!selected.length&&regular.length)selected.push(regular[0]);const extra=regular.find(food=>!selected.includes(food));if(selected.length<3&&extra)selected.push(extra);const oil=foods.find(food=>/油脂/.test(food.category)),ingredients=selected.map(food=>({name:food.name,grams:portionFor(food)}));if(oil&&selected.some(food=>/肉类|水产|蛋奶|豆制品|蔬菜/.test(food.category)))ingredients.push({name:oil.name,grams:5});
   const steps=[`将${ingredients.map(x=>x.name).join('、')}按标注份量备好。`];if(selected.some(food=>/肉类|水产|蛋奶|豆制品/.test(food.category)))steps.push('将蛋白质类食材充分加热至熟。');if(selected.some(food=>/蔬菜/.test(food.category)))steps.push(`将${selected.filter(food=>/蔬菜/.test(food.category)).map(x=>x.name).join('、')}炒熟或蒸熟。`);if(selected.some(food=>/主食/.test(food.category)))steps.push(`将${selected.filter(food=>/主食/.test(food.category)).map(x=>x.name).join('、')}按份量装盘。`);steps.push('完成后按一人份装盘。');
-  return {name:`${selected.map(x=>x.name.replace(/[（(].*?[）)]/g,'')).slice(0,3).join('')}家常餐`,ingredients,steps,minutes:Number.parseInt(cookTime)||20,reason:'根据已匹配的现有食材组合，营养值由USDA 数据重新计算。',uncertainties:['实际用油、食材生熟状态和最终食用比例会影响总热量']};
+  return {name:`${selected.map(x=>x.name.replace(/[（(].*?[）)]/g,'')).slice(0,3).join('')}家常餐`,ingredients,steps,minutes:Number.parseInt(cookTime)||20,reason:'根据已匹配的现有食材组合，营养值由台湾食药署 数据重新计算。',uncertainties:['实际用油、食材生熟状态和最终食用比例会影响总热量']};
 }
 function unsupportedFoodMentions(plan,allowedFoods){
   const text=[plan?.name,...(Array.isArray(plan?.steps)?plan.steps:[])].join(' '),allowedIds=new Set(allowedFoods.map(food=>String(food.id))),allowedNames=allowedFoods.map(food=>food.name),terms=FOOD_TERMS,unsupported=new Set();for(const row of terms){const term=String(row.term||'').trim(),knownCombination=/番茄炒(?:鸡)?蛋|西红柿炒(?:鸡)?蛋/.test(term)&&allowedNames.some(x=>/番茄|西红柿/.test(x))&&allowedNames.some(x=>/鸡蛋/.test(x));if(term.length>=2&&text.includes(term)&&!allowedIds.has(String(row.id))&&!knownCombination)unsupported.add(term)}return [...unsupported];
 }
 function calculateRecipeNutrition(plan,foods){
   const byName=new Map(foods.map(food=>[food.name,food])),items=[];
-  for(const item of Array.isArray(plan.ingredients)?plan.ingredients:[]){const food=byName.get(String(item.name||'').trim());if(!food)continue;const grams=Math.min(600,Math.max(1,Number(item.grams)||0));if(!grams)continue;items.push({name:food.name,grams,category:food.category,source:food.source,kcal:+((food.kcal||0)*grams/100).toFixed(1),protein:+((food.protein||0)*grams/100).toFixed(1),fat:+((food.fat||0)*grams/100).toFixed(1),carbs:+((food.carbs||0)*grams/100).toFixed(1)});}
+  for(const item of Array.isArray(plan.ingredients)?plan.ingredients:[]){const food=byName.get(String(item.name||'').trim());if(!food)continue;const grams=Math.min(600,Math.max(1,Number(item.grams)||0));if(!grams)continue;const scaled=key=>food[key]==null?null:+(food[key]*grams/100).toFixed(1);items.push({name:food.name,grams,category:food.category,source:food.source,kcal:scaled('kcal'),protein:scaled('protein'),fat:scaled('fat'),carbs:scaled('carbs')});}
   if(!items.length)throw new Error('食谱没有使用已匹配的食材');
-  const sum=key=>+items.reduce((total,item)=>total+(item[key]||0),0).toFixed(1);
+  const sum=key=>items.some(item=>item[key]==null)?null:+items.reduce((total,item)=>total+item[key],0).toFixed(1);
   return {...plan,ingredients:items,nutrition:{kcal:Math.round(sum('kcal')),protein:sum('protein'),fat:sum('fat'),carbs:sum('carbs')}};
 }
 async function createDiyRecipe(input){
   const requested=[...new Set((Array.isArray(input.ingredients)?input.ingredients:[]).map(x=>String(x).trim()).filter(Boolean))].slice(0,12);if(!requested.length)throw new Error('请至少输入一种现有食材');
   const customFoods=new Map((Array.isArray(input.customFoods)?input.customFoods:[]).map((food,index)=>{const name=String(food.name||'').trim(),number=(value,min,max)=>{const parsed=Number(value);return Number.isFinite(parsed)&&parsed>=min&&parsed<=max?parsed:null},kcal=number(food.kcal,0,1000),protein=number(food.protein,0,100),fat=number(food.fat,0,100),carbs=number(food.carbs,0,100);return [name,{id:`custom-${index}`,name,category:'用户输入',kcal,protein,fat,carbs,source:'user_input',source_url:null,source_id:null,confidence:'low',match_type:'user_provided'}]}).filter(([name,food])=>name&&food.kcal!=null&&food.protein!=null&&food.fat!=null&&food.carbs!=null));
-  const matched=[],unmatched=[];for(const name of requested){const row=customFoods.get(name)||await usdaFoodRow(name);if(row&&!matched.some(x=>x.id===row.id))matched.push(row);else if(!row)unmatched.push(name)}if(!matched.length)throw Object.assign(new Error('没有找到可靠营养数据，请手动填写包装或权威来源中的每100g营养值'),{status:422,unmatched});
-  const pantryNames=Array.isArray(input.pantry)?input.pantry:['食用植物油','酱油','食盐'],allowedPantry=new Set(['食用植物油','酱油','食盐','醋','白砂糖','辣椒酱','黑胡椒酱']),pantryFoods=(await Promise.all(pantryNames.filter(name=>allowedPantry.has(name)).map(name=>usdaFoodRow(name)))).filter(Boolean),availableFoods=[...matched];for(const food of pantryFoods)if(!availableFoods.some(x=>x.id===food.id))availableFoods.push(food);
+  const matched=[],unmatched=[];for(const name of requested){const row=customFoods.get(name)||await datasetFoodRow(name);if(row&&!matched.some(x=>x.id===row.id))matched.push(row);else if(!row)unmatched.push(name)}if(!matched.length)throw Object.assign(new Error('没有找到可靠营养数据，请手动填写包装或权威来源中的每100g营养值'),{status:422,unmatched});
+  const pantryNames=Array.isArray(input.pantry)?input.pantry:['食用植物油','酱油','食盐'],allowedPantry=new Set(['食用植物油','酱油','食盐','醋','白砂糖','辣椒酱','黑胡椒酱']),pantryFoods=(await Promise.all(pantryNames.filter(name=>allowedPantry.has(name)).map(name=>datasetFoodRow(name)))).filter(Boolean),availableFoods=[...matched];for(const food of pantryFoods)if(!availableFoods.some(x=>x.id===food.id))availableFoods.push(food);
   let plan=null,generatedBy='rules';const targets=mealTargets(input.profile||{},input.today||{},input.mealType||inferMealType()),budgetPrompt=targets.budgetStatus==='exhausted'?`今日理论参考已超出；本餐不要按0热量或惩罚性补偿设计，按正常${targets.mealType}参考约${targets.mealKcal} kcal、蛋白质约${targets.mealProtein}g，优先营养密度并避免过量。`:`本餐动态热量预算约${targets.mealKcal} kcal、蛋白质约${targets.mealProtein}g；今日总目标${targets.dailyTarget} kcal，已摄入${targets.consumedKcal} kcal，剩余${targets.remainingKcal} kcal，并须为后续餐次预留${targets.reservedKcal} kcal。尽量让食谱热量接近本餐预算，不能把全天剩余额度全部用完。`;
   if(env.DASHSCOPE_API_KEY){try{const foodData=availableFoods.map(x=>({name:x.name,category:x.category,kcalPer100g:x.kcal,proteinPer100g:x.protein,fatPer100g:x.fat,carbsPer100g:x.carbs})),profile=input.profile||{},preferenceText=`饮食方式：${profile.mealMode||'未设置'}；当前想改善的习惯：${profile.habit||'无'}；辣度：${profile.tastePreference||'未设置'}；其他偏好：${profile.preferences||'无'}；不喜欢：${profile.dislikedFoods||'无'}；过敏或严格忌口：${profile.allergies||'无'}`,d=await qwenChat({model:env.QWEN_WEB_MODEL||'qwen-plus',response_format:{type:'json_object'},messages:[{role:'user',content:`根据以下真实可用食材生成一人份${targets.mealType}。${budgetPrompt}不需要使用全部食材，应只选择适合组成这顿饭的部分食材。只能使用列表中的主食材、用户勾选的常备调料以及水，不得添加其他有热量的食材。用户可用调料：${pantryNames.join('、')||'无'}。勾选调料只代表允许使用，不要求全部加入；只选择这道菜真正需要的调料，未使用的调料不要写入ingredients或步骤。有热量的调料如使用必须写出实际克数，食用油建议0–10g。时间不超过${String(input.cookTime||'20分钟')}，厨具为${String(input.cookTools||'普通厨具')}。用户设置：${preferenceText}。过敏和严格忌口是硬约束，绝不能使用；口味是软偏好，只有已勾选调料能真实实现时才采用，不能用焦香等概念冒充辣味。食材数据库：${JSON.stringify(foodData)}。只返回JSON：{"name":"","ingredients":[{"name":"必须与数据库name完全一致","grams":0}],"steps":[""],"minutes":20,"reason":"","uncertainties":[""]}。克数必须可执行，步骤必须与厨具匹配。不要自行计算或声称精确营养值，营养由服务器计算。`} ]});plan=parseJsonText(responseText(d));generatedBy='qwen'}catch(e){console.warn(`DIY recipe model fallback: ${e.message}`)}}
   if(plan){const seen=new Set();plan.ingredients=(Array.isArray(plan.ingredients)?plan.ingredients:[]).filter(i=>{const n=String(i.name||'').trim();if(!n||seen.has(n))return false;seen.add(n);return true});plan.steps=(Array.isArray(plan.steps)?plan.steps:[]).slice(0,6);const unsupported=unsupportedFoodMentions(plan,availableFoods);if(unsupported.length){console.warn(`DIY recipe rejected unsupported foods: ${unsupported.join('、')}`);plan=null;generatedBy='rules'}}
@@ -292,7 +305,7 @@ function parseMenuText(raw=''){
 function sanitizeMenuItems(value=[]){const seen=new Set(),items=[];for(const entry of Array.isArray(value)?value:[]){const name=String(entry?.name||'').trim().slice(0,80);if(name.length<2)continue;const category=String(entry.category||'未分类').trim().slice(0,30)||'未分类',price=entry.price==null||entry.price===''?null:Number(entry.price),key=`${category}|${name}|${Number.isFinite(price)?price:''}`;if(seen.has(key))continue;seen.add(key);items.push({name,category,price:Number.isFinite(price)&&price>=0?+price.toFixed(2):null,unit:String(entry.unit||'').slice(0,12),description:String(entry.description||'').slice(0,160),confidence:['high','medium','low'].includes(entry.confidence)?entry.confidence:'medium'});if(items.length>=300)break}return items}
 async function rankParsedMenu(items=[],context={}){
   const profile=context.profile||{},blocked=[...preferenceTerms(profile.allergies),...preferenceTerms(profile.dislikedFoods)],targets=mealTargets(profile,context.today||{},context.mealType||''),safe=items.filter(item=>!blocked.some(term=>item.name.includes(term)||knownDishAllergens(item.name).includes(term))).slice(0,12),ranked=(await Promise.all(safe.map(async item=>{const estimate=await estimateMenuDish(item.name),distance=estimate?Math.abs(estimate.kcal-targets.mealKcal):targets.mealKcal,confidencePenalty=item.confidence==='low'?30:item.confidence==='medium'?10:0;return {...item,estimate,score:Math.max(0,Math.round(100-distance/Math.max(1,targets.mealKcal)*50-confidencePenalty))}}))).sort((a,b)=>b.score-a.score).slice(0,3);
-  return {targets,recommendations:ranked.map(item=>({name:item.name,category:item.category,price:item.price,score:item.score,kcal:item.estimate?.kcal??null,protein:item.estimate?.protein??null,portionGrams:item.estimate?.portionGrams??null,nutritionConfidence:item.estimate?.confidence||'low',reason:item.estimate?(targets.budgetStatus==='exhausted'?`今日理论参考已超出；按正常${targets.mealType}参考约 ${targets.mealKcal} kcal 匹配，不以跳餐或0热量餐补偿；营养为USDA 对应食品及份量估算`:`按${targets.mealType}约 ${targets.mealKcal} kcal 的动态预算匹配；营养为USDA 对应食品及份量估算`):'菜名来自菜单原文，当前营养库没有可靠匹配，请结合实物确认份量'}))};
+  return {targets,recommendations:ranked.map(item=>({name:item.name,category:item.category,price:item.price,score:item.score,kcal:item.estimate?.kcal??null,protein:item.estimate?.protein??null,portionGrams:item.estimate?.portionGrams??null,nutritionConfidence:item.estimate?.confidence||'low',reason:item.estimate?(targets.budgetStatus==='exhausted'?`今日理论参考已超出；按正常${targets.mealType}参考约 ${targets.mealKcal} kcal 匹配，不以跳餐或0热量餐补偿；营养为台湾食药署 对应食品及份量估算`:`按${targets.mealType}约 ${targets.mealKcal} kcal 的动态预算匹配；营养为台湾食药署 对应食品及份量估算`):'菜名来自菜单原文，当前营养库没有可靠匹配，请结合实物确认份量'}))};
 }
 async function parseFullMenu(input={}){
   const restaurantName=String(input.restaurantName||'未命名餐馆').trim().slice(0,80),sourceUrl=validPublicUrl(input.sourceUrl),sourceType=input.imageDataUrl?'user_image':String(input.menuText||'').trim()?'user_text':sourceUrl?'public_url':'';if(!sourceType)throw Object.assign(new Error('请上传菜单图片、粘贴菜单文字或提供公开菜单链接'),{status:400});
@@ -325,7 +338,7 @@ async function createDailyMealPlan(input={}){
 }
 async function estimateMenuDish(name,budget={remaining:12}){
   if(budget.remaining--<=0)return null;
-  const food=await usdaFoodRow(name);if(!food)return null;const category=String(food.category||''),drink=/饮品|零食饮料/.test(category)||/茶|咖啡|果汁|饮料/.test(name),staple=/主食|外卖快餐/.test(category)||/饭|面|粉|粥|饺|包|汉堡|披萨|三明治/.test(name),portionGrams=drink?400:staple?325:/家常菜/.test(category)?250:200,kcal=Math.round((food.kcal||0)*portionGrams/100),protein=+((food.protein||0)*portionGrams/100).toFixed(1);
+  const food=await datasetFoodRow(name);if(!food)return null;const category=String(food.category||''),drink=/饮品|零食饮料/.test(category)||/茶|咖啡|果汁|饮料/.test(name),staple=/主食|外卖快餐/.test(category)||/饭|面|粉|粥|饺|包|汉堡|披萨|三明治/.test(name),portionGrams=drink?400:staple?325:/家常菜/.test(category)?250:200,kcal=Math.round((food.kcal||0)*portionGrams/100),protein=+((food.protein||0)*portionGrams/100).toFixed(1);
   return {dish:name,matchedFood:food.name,category,portionGrams,kcal,protein,confidence:'medium',matchType:food.match_type,source:food.source};
 }
 function preferenceTerms(value){return String(value||'').split(/[、,，;；\s]+/).map(x=>x.replace(/不吃|过敏|不喜欢|忌口|不要/g,'').trim()).filter(x=>x.length>=2)}
@@ -339,7 +352,7 @@ async function personalizeRestaurant(restaurant,recommendation,context={}){
   const targets=mealTargets(context.profile,context.today,context.mealType),hours=restaurantHours(restaurant,targets.mealType,context.dayOffset),profile=context.profile||{},blocked=[...preferenceTerms(profile.allergies),...preferenceTerms(profile.dislikedFoods)],preferred=preferenceTerms(profile.preferences),text=`${restaurant.name||''} ${restaurant.type||''}`,isBeverage=/奶茶|茶饮|饮品|冷饮|咖啡|甜品|喜茶|奈雪|星巴克|瑞幸/i.test(text),isChinese=/中餐|东北菜|川菜|湘菜|粤菜|家常菜|地方菜|餐馆|饭店/i.test(text),conflicts=(dish,matched='')=>blocked.some(term=>dish.includes(term)||matched.includes(term)||knownDishAllergens(dish).includes(term)||knownDishAllergens(matched).includes(term)),allowedDishes=(recommendation.dishes||[]).filter(dish=>!conflicts(dish)),removedForPreference=allowedDishes.length!==(recommendation.dishes||[]).length,nutritionBudget=context.nutritionBudget||{remaining:12},estimates=(await Promise.all((recommendation.mode==='type_fallback'?[]:allowedDishes).slice(0,12).map(name=>estimateMenuDish(name,nutritionBudget)))).filter(Boolean).filter(item=>!conflicts(item.dish,item.matchedFood));
   for(const item of estimates){const preferenceBonus=(preferred.some(term=>item.dish.includes(term))?8:0)+(Array.isArray(context.recentConfirmed)&&context.recentConfirmed.some(name=>name&&(item.dish.includes(name)||name.includes(item.dish)))?6:0);item.score=Math.round(Math.max(0,100-Math.abs(item.kcal-targets.mealKcal)/Math.max(1,targets.mealKcal)*55+preferenceBonus))}
   estimates.sort((a,b)=>b.score-a.score);const selected=estimates[0]||null;let mealDisplay=recommendation.mealStructure||null,kcal=null,protein=null,reason=recommendation.reason,confidence='low';
-  if(selected){const originalGrams=selected.portionGrams,scale=Math.min(1.5,Math.max(.25,targets.mealKcal/Math.max(1,selected.kcal)));selected.portionGrams=Math.max(30,Math.round(selected.portionGrams*scale/10)*10);const actualScale=selected.portionGrams/originalGrams;kcal=Math.round(selected.kcal*actualScale);protein=+(selected.protein*actualScale).toFixed(1);mealDisplay=`${selected.dish}（约${selected.portionGrams}g）`;confidence=selected.confidence;reason=`按 USDA 对应食品和估计份量计算，具体配方及实际克数仍需确认；本餐参考约${targets.mealKcal} kcal。`}
+  if(selected){const originalGrams=selected.portionGrams,scale=Math.min(1.5,Math.max(.25,targets.mealKcal/Math.max(1,selected.kcal)));selected.portionGrams=Math.max(30,Math.round(selected.portionGrams*scale/10)*10);const actualScale=selected.portionGrams/originalGrams;kcal=Math.round(selected.kcal*actualScale);protein=+(selected.protein*actualScale).toFixed(1);mealDisplay=`${selected.dish}（约${selected.portionGrams}g）`;confidence=selected.confidence;reason=`按 台湾食药署 对应食品和估计份量计算，具体配方及实际克数仍需确认；本餐参考约${targets.mealKcal} kcal。`}
 
   else if(removedForPreference&&!allowedDishes.length){mealDisplay='已排除与过敏、忌口或不喜欢食材冲突的候选菜';reason='当前已知菜单中没有安全候选，请查看店内其他菜品并再次确认配料'}
   else if(allowedDishes.some(dish=>/三明治|贝果|卷|饭|面|粉|粥|饺|包|沙拉|披萨|吐司|汉堡|热狗|鸡|鱼|虾|牛|肉|蛋/.test(dish))){reason=`可根据当前真实菜单或门店类型优先选择这类餐食；暂不强行估算热量，用餐后可拍照识别或手动记录实际摄入`}
@@ -348,18 +361,19 @@ async function personalizeRestaurant(restaurant,recommendation,context={}){
   return {...recommendation,dishes:allowedDishes,mealStructure:removedForPreference?null:recommendation.mealStructure,personalization:{targets,hours,mealDisplay,kcal,protein,confidence,reason,matchedCount:estimates.length,score,blockedTerms:blocked,nutritionPending:kcal==null}};
 }
 async function api(req,res,url){
-  if(req.method==='GET'&&url.pathname==='/api/health')return json(res,200,{ok:true,services:{qwen:!!env.DASHSCOPE_API_KEY,usda:true,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'USDA',foodCount:0,authoritativeFoodCount:(await db.prepare('SELECT COUNT(*) count FROM authoritative_foods').get()).count});
+  if(req.method==='GET'&&url.pathname==='/api/health'){const count=await db.prepare('SELECT COUNT(*) count,SUM(nutrient_count) nutrient_rows FROM nutrition_foods').get();return json(res,200,{ok:true,services:{qwen:!!env.DASHSCOPE_API_KEY,tfda:true,usda:false,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'TFDA',foodCount:0,authoritativeFoodCount:count.count,nutrientRecordCount:count.nutrient_rows,datasetRelease:NUTRITION_MANIFEST.release})}
+  if(req.method==='GET'&&url.pathname==='/api/nutrition/details'){const result=await authoritativeFoodDetails(db,url.searchParams.get('q'));return json(res,result?200:404,result?{ok:true,result}:{ok:false,error:'未找到食药署食品明细'})}
   if(req.method==='GET'&&['/api/nutrition/dataset-search','/api/nutrition/search','/api/nutrition/resolve'].includes(url.pathname)){
     const q=(url.searchParams.get('q')||'').trim();if(!q)return json(res,400,{error:'缺少q'});
     try{
       const resolved=await resolveNutrition(q);
       if(url.pathname.endsWith('/dataset-search'))return json(res,200,{ok:true,...resolved,basis:'per100g',results:resolved.nutrition?[resolved.nutrition]:resolved.candidates});
       if(resolved.nutrition)return json(res,200,{ok:true,result:resolved.nutrition,...resolved});
-      return json(res,resolved.needsClarification?409:404,{ok:false,error:resolved.question||'USDA 未找到可靠营养记录',...resolved});
+      return json(res,resolved.needsClarification?409:404,{ok:false,error:resolved.question||'台湾食药署 未找到可靠营养记录',...resolved});
     }catch(error){return json(res,502,{error:error.message})}
   }
-  if(req.method==='GET'&&url.pathname.startsWith('/api/nutrition/barcode/'))return json(res,410,{error:'当前营养库仅使用 USDA，不再查询第三方条码库；请按具体食物名称检索，或手动填写包装营养信息。'});
-  if(req.method==='POST'&&url.pathname==='/api/nutrition/web-search')return json(res,410,{error:'网页营养估算已停用，请使用 USDA 中文检索。'});
+  if(req.method==='GET'&&url.pathname.startsWith('/api/nutrition/barcode/'))return json(res,410,{error:'当前营养库仅使用 台湾食药署，不再查询第三方条码库；请按具体食物名称检索，或手动填写包装营养信息。'});
+  if(req.method==='POST'&&url.pathname==='/api/nutrition/web-search')return json(res,410,{error:'网页营养估算已停用，请使用 台湾食药署 中文检索。'});
   if(req.method==='POST'&&url.pathname==='/api/meals/analyze'){
     try{
       const b=await body(req);if(!b.imageDataUrl)return json(res,400,{error:'缺少图片'});
@@ -374,7 +388,7 @@ async function api(req,res,url){
       }
       const uncertainties=[...(Array.isArray(vision.uncertainties)?vision.uncertainties:[]),...clarifications];
       if(commonPortionCount)uncertainties.push(`${commonPortionCount}项无法可靠判断重量，已采用常见一人份范围`);
-      if(unmatched.length)uncertainties.push(`USDA 暂未确认营养数据：${unmatched.join('、')}；这些部分未计入总热量，请先确认具体食品或补充包装营养信息`);
+      if(unmatched.length)uncertainties.push(`台湾食药署 暂未确认营养数据：${unmatched.join('、')}；这些部分未计入总热量，请先确认具体食品或补充包装营养信息`);
       return json(res,200,{ok:true,result:{...vision,foods,followUpQuestion:clarifications[0]||vision.followUpQuestion,uncertainties,commonPortionCount,unmatchedFoods:unmatched},trace:[...resolvedTraces]});
     }catch(error){return json(res,502,{error:error.message})}
   }
@@ -386,7 +400,7 @@ async function api(req,res,url){
     try{return json(res,200,{ok:true,result:buildNaturalWeekPlan(await body(req,800_000)),trace:['calculate_natural_week','read_confirmed_meals','preserve_locked_days','build_weekly_plan_proposal']})}catch(e){return json(res,e.status||400,{error:e.message})}
   }
   if(req.method==='POST'&&url.pathname==='/api/recipes/diy'){
-    try{const result=await createDiyRecipe(await body(req,200_000));return json(res,200,{ok:true,result,trace:['usda_nutrition_match',result.generatedBy==='qwen'?'qwen_recipe_plan':'rule_recipe_plan','server_nutrition_calculation']})}catch(e){return json(res,e.status||400,{error:e.message,unmatched:e.unmatched||[]})}
+    try{const result=await createDiyRecipe(await body(req,200_000));return json(res,200,{ok:true,result,trace:['tfda_nutrition_match',result.generatedBy==='qwen'?'qwen_recipe_plan':'rule_recipe_plan','server_nutrition_calculation']})}catch(e){return json(res,e.status||400,{error:e.message,unmatched:e.unmatched||[]})}
   }
   if(req.method==='POST'&&url.pathname==='/api/agent/chat'){
     try{const b=await body(req,300_000);if(!rateAllowed(b.clientId))return json(res,429,{error:'Agent 请求太频繁，请稍后再试'});return json(res,200,{ok:true,result:await agentChat(b)})}catch(e){return json(res,e.status||502,{error:e.message})}
@@ -399,7 +413,7 @@ async function api(req,res,url){
     try{let location=`${lng},${lat}`;const convert=await fetch(`https://restapi.amap.com/v3/assistant/coordinate/convert?key=${encodeURIComponent(key)}&locations=${location}&coordsys=gps`),converted=await convert.json();if(converted.status==='1'&&converted.locations)location=converted.locations;const apiUrl=`https://restapi.amap.com/v5/place/around?key=${encodeURIComponent(key)}&location=${location}&types=050000${cuisine?`&keywords=${encodeURIComponent(cuisine)}`:''}&radius=${radius}&page_size=20&show_fields=business,photos`;const r=await fetch(apiUrl),d=await r.json();if(d.status!=='1')throw new Error(d.info||'高德查询失败');const results=(d.pois||[]).map(p=>({id:p.id,name:p.name,address:p.address,distance:Number(p.distance),type:p.type,typecode:p.typecode,business:p.business||{},photos:Array.isArray(p.photos)?p.photos.slice(0,6):[],location:p.location,source:'高德POI'}));return json(res,200,{ok:true,results,cuisine,trace:['browser_geolocation','amap_coordinate_convert',cuisine?'amap_cuisine_search':'amap_place_around','amap_business_photos']})}catch(e){return json(res,502,{error:e.message})}
   }
   if(req.method==='POST'&&url.pathname==='/api/restaurants/recommendations'){
-    try{const b=await body(req,400_000),requestedCount=Math.min(20,Math.max(1,Number(b.requestedCount)||5)),restaurants=Array.isArray(b.restaurants)?b.restaurants.slice(0,20):[];if(!restaurants.length)return json(res,400,{error:'缺少候选餐馆'});const dayOffset=Number(b.dayOffset)===1?1:0,mealType=String(b.mealType||''),today=dayOffset?{calories:0,protein:0,meals:[]}:b.today||{},hoursChecked=restaurants.map(restaurant=>({restaurant,hours:restaurantHours(restaurant,mealType,dayOffset)})),closedCount=hoursChecked.filter(x=>x.hours.status==='closed').length,eligible=hoursChecked.filter(x=>x.hours.status!=='closed').slice(0,requestedCount).map(x=>x.restaurant),nutritionBudget={remaining:8},personalized=await Promise.all(eligible.map(async restaurant=>{const menu=await findRestaurantMenu(restaurant);return {...restaurant,recommendation:await personalizeRestaurant(restaurant,menu,{profile:b.profile||{},today,mealType,dayOffset,nutritionBudget,cuisine:String(b.cuisine||'')})}})),results=personalized.sort((a,b)=>b.recommendation.personalization.score-a.recommendation.personalization.score);return json(res,200,{ok:true,results,targets:results[0]?.recommendation.personalization.targets,cuisine:String(b.cuisine||''),dayOffset,requestedCount,returnedCount:results.length,closedCount,trace:['amap_candidates','business_hours_check','closed_restaurants_filtered','requested_count_applied','public_menu_search','menu_verification','usda_nutrition_match',dayOffset?'new_day_meal_budget':'dynamic_meal_budget','cuisine_preference','personalized_ranking']})}catch(e){return json(res,502,{error:e.message})}
+    try{const b=await body(req,400_000),requestedCount=Math.min(20,Math.max(1,Number(b.requestedCount)||5)),restaurants=Array.isArray(b.restaurants)?b.restaurants.slice(0,20):[];if(!restaurants.length)return json(res,400,{error:'缺少候选餐馆'});const dayOffset=Number(b.dayOffset)===1?1:0,mealType=String(b.mealType||''),today=dayOffset?{calories:0,protein:0,meals:[]}:b.today||{},hoursChecked=restaurants.map(restaurant=>({restaurant,hours:restaurantHours(restaurant,mealType,dayOffset)})),closedCount=hoursChecked.filter(x=>x.hours.status==='closed').length,eligible=hoursChecked.filter(x=>x.hours.status!=='closed').slice(0,requestedCount).map(x=>x.restaurant),nutritionBudget={remaining:8},personalized=await Promise.all(eligible.map(async restaurant=>{const menu=await findRestaurantMenu(restaurant);return {...restaurant,recommendation:await personalizeRestaurant(restaurant,menu,{profile:b.profile||{},today,mealType,dayOffset,nutritionBudget,cuisine:String(b.cuisine||'')})}})),results=personalized.sort((a,b)=>b.recommendation.personalization.score-a.recommendation.personalization.score);return json(res,200,{ok:true,results,targets:results[0]?.recommendation.personalization.targets,cuisine:String(b.cuisine||''),dayOffset,requestedCount,returnedCount:results.length,closedCount,trace:['amap_candidates','business_hours_check','closed_restaurants_filtered','requested_count_applied','public_menu_search','menu_verification','tfda_nutrition_match',dayOffset?'new_day_meal_budget':'dynamic_meal_budget','cuisine_preference','personalized_ranking']})}catch(e){return json(res,502,{error:e.message})}
   }
   if(req.method==='POST'&&url.pathname==='/api/menus/parse'){
     try{const result=await parseFullMenu(await body(req,12_000_000));return json(res,200,{ok:true,result,trace:['read_menu_source',result.parsedBy==='qwen'?'qwen_full_menu_parse':'deterministic_menu_parse','check_menu_completeness','rank_verified_menu_items']})}catch(e){return json(res,e.status||502,{error:e.message})}
@@ -566,7 +580,7 @@ const AGENT_TOOLS=[
   {type:'function',function:{name:'search_nearby_restaurants',description:'按坐标或区域搜索附近餐馆；提供 area 时先转成坐标，否则需要 latitude/longitude。',parameters:{type:'object',properties:{latitude:{type:'number'},longitude:{type:'number'},radius:{type:'number'},cuisine:{type:'string'},area:{type:'string'}},required:[]}}},
   {type:'function',function:{name:'get_restaurant_menu',description:'检索某家餐馆的公开菜单或高德特色菜。',parameters:{type:'object',properties:{restaurant:{type:'object'}},required:['restaurant']}}},
   {type:'function',function:{name:'personalize_restaurant',description:'按预算、忌口硬过滤、偏好与近期确认记录，对候选菜做个性化匹配和份量调整。',parameters:{type:'object',properties:{restaurant:{type:'object'},menu:{type:'object'},mealType:{type:'string'}},required:['restaurant','menu']}}},
-  {type:'function',function:{name:'search_nutrition',description:'查询食材或菜品的营养，仅使用 USDA 权威数据库；支持中文别名。根据完整食物名称自动匹配相应品类；通用参考须说明，不能用单一食材代表复合菜。',parameters:{type:'object',properties:{name:{type:'string'}},required:['name']}}},
+  {type:'function',function:{name:'search_nutrition',description:'查询食材或菜品的营养，仅使用 台湾食药署 权威数据库；支持中文别名。根据完整食物名称自动匹配相应品类；通用参考须说明，不能用单一食材代表复合菜。',parameters:{type:'object',properties:{name:{type:'string'}},required:['name']}}},
   {type:'function',function:{name:'get_daily_plan',description:'生成今天尚未记录餐次的三餐概览与DIY食谱。',parameters:{type:'object',properties:{},required:[]}}},
   {type:'function',function:{name:'get_memory',description:'读取最近7天经历记忆摘要（已确认餐食、复盘结论）。',parameters:{type:'object',properties:{},required:[]}}},
   {type:'function',function:{name:'propose_meal_record',description:'生成“确认入账”提案：只返回待确认的餐食条目，绝不写入记录。',parameters:{type:'object',properties:{name:{type:'string'},calories:{type:'number'},protein:{type:'number'},mealType:{type:'string'},recordDate:{type:'string'},source:{type:'string'}},required:['name','calories','mealType']}}},
@@ -641,7 +655,10 @@ function isMealRecordRequest(message=''){
 }
 function mentionedFoodNames(message='',limit=8){
   const text=String(message||'');
-  const rows=[...FOOD_TERMS].sort((a,b)=>b.term.length-a.term.length);
+  // Recognizing an ingredient/dish in a sentence does not imply the dataset
+  // contains its nutrition. Pass these names intact so lookup can report a miss.
+  const intentOnly=['全麦面包','回锅肉','红烧肉','宫保鸡丁','麻婆豆腐','虾仁炒饭','熟鸡胸肉','烤鸡胸肉'];
+  const rows=[...FOOD_TERMS,...intentOnly.map(term=>({id:`unmatched:${term}`,term}))].sort((a,b)=>b.term.length-a.term.length);
   const candidates=rows.map(row=>({...row,term:String(row.term||'').trim(),index:text.indexOf(String(row.term||'').trim())})).filter(row=>row.term.length>=2&&row.index>=0).sort((a,b)=>b.term.length-a.term.length||a.index-b.index);
   const spans=[],foodIds=new Set(),matched=[];
   for(const row of candidates){
@@ -672,8 +689,8 @@ function splitTextMealItems(message=''){
 async function matchTextMealFood(name=''){
   const clean=String(name||'').replace(/[，。；;！!？?]/g,'').trim();if(!clean)return null;
   const fallback=[[/牛肉包|猪肉包|鲜肉包|肉包/, '肉包子'],[/菜包|素包/, '菜包子'],[/豆沙包|红豆包/, '豆沙包']].find(([pattern])=>pattern.test(clean));
-  if(fallback)return usdaFoodRow(fallback[1]);
-  return usdaFoodRow(clean);
+  if(fallback)return datasetFoodRow(fallback[1]);
+  return datasetFoodRow(clean);
 }
 function defaultTextMealGrams(food,name=''){
   const text=String(name||'');
@@ -686,11 +703,11 @@ async function estimateTextMealRecord(message=''){
   const items=splitTextMealItems(message);if(!items.length)return {ok:false,error:'没有识别到可记录的食物，请补充吃了什么和每种食物的份量'};
   const resolved=[],unmatched=[];
   for(const item of items){const food=await matchTextMealFood(item.name),grams=item.grams||defaultTextMealGrams(food,item.name);if(!food||!grams){unmatched.push(item.name);continue}resolved.push({...item,food,grams:Number(grams)*item.quantity});}
-  if(unmatched.length)return {ok:false,error:`无法从USDA 营养库可靠估算：${unmatched.join('、')}；请补充克数、包装营养信息，或改用手动记录`};
+  if(unmatched.length)return {ok:false,error:`无法从台湾食药署 营养库可靠估算：${unmatched.join('、')}；请补充克数、包装营养信息，或改用手动记录`};
   const calories=Math.round(resolved.reduce((sum,item)=>sum+(Number(item.food.kcal)||0)*item.grams/100,0)),protein=+(resolved.reduce((sum,item)=>sum+(Number(item.food.protein)||0)*item.grams/100,0)).toFixed(1);
   if(calories<=0)return {ok:false,error:'未能形成可靠热量估算，请补充食物份量或营养信息'};
   const name=resolved.map(item=>`${item.name} ${item.quantity}${item.unit}`).join('、'),basis=resolved.map(item=>`${item.name}按${item.grams/item.quantity}g/${item.unit}`).join('；');
-  return {ok:true,name,calories,protein,source:`USDA 营养库文字估算（${basis}）`,items:resolved.map(item=>({name:item.name,matchedFood:item.food.name,grams:item.grams}))};
+  return {ok:true,name,calories,protein,source:`台湾食药署 营养库文字估算（${basis}）`,items:resolved.map(item=>({name:item.name,matchedFood:item.food.name,grams:item.grams}))};
 }
 function explicitToolForMessage(message='',pendingMeal=null){
   const text=String(message||'');
@@ -725,7 +742,7 @@ function extractChineseMinutes(text=''){
 }
 function nutritionQueryFromMessage(message='',foods=[]){
   const text=String(message||'').trim();
-  const fdc=text.match(/fdc:\d+/i);if(fdc)return fdc[0];
+  const identifier=text.match(/(?:tfda:[a-r]\d{4,8}|fdc:\d+)/i);if(identifier)return identifier[0];
   const beforeBasis=text.match(/(?:查一下|查询一下|查询)?\s*([^，。！？?]{2,30}?)\s*(?:每\s*100\s*克|每百克)/)?.[1]?.trim();
   if(beforeBasis)return beforeBasis.replace(/^(?:查一下|查询一下|查询)/,'').trim();
   const afterQuery=text.match(/(?:查一下|查询一下|查询)\s*([^，。！？?]{2,30}?)(?:的)?(?:热量|蛋白质|营养)/)?.[1]?.trim();
@@ -785,7 +802,7 @@ function controlledWorkflowTools(routeIntent='',mealScenario='',message='',pendi
     if(/体重|称重|公斤|\bkg\b/i.test(text))return [];
     return isMealRecordRequest(text)?['propose_meal_record']:[];
   }
-  if(routeIntent==='other'&&/fdc:\d+/i.test(text))return ['search_nutrition'];
+  if(routeIntent==='other'&&/(?:tfda:[a-r]\d{4,8}|fdc:\d+)/i.test(text))return ['search_nutrition'];
   if(routeIntent==='other')return /(?:每\s*100\s*克|每百克).{0,20}(?:热量|蛋白质|营养)|(?:查一下|查询|多少).{0,30}(?:热量|蛋白质|营养)/.test(text)?['search_nutrition']:[];
   if(routeIntent!=='meal')return [];
   if(mealScenario==='unknown')return /最近|近期|历史|记录|重复|常吃/.test(text)?['get_memory']:[];
@@ -1259,7 +1276,7 @@ function renderRecipeResult(message,entry,ctx){
   else if(/刚才说错|重新推荐/.test(message))prefix='已以后轮纠正和海鲜过敏约束为准，不使用被否定的食材。\n\n';
   else if(targets.budgetStatus==='exhausted'||ctx.targets?.budgetStatus==='exhausted')prefix='今天虽然已经超出理论参考，晚餐仍应正常、规律地吃，不需要跳餐或跨日补偿。\n\n';
   const dateNote=ctx.dayOffset===1?'这是明天的餐食，不扣减今天已经摄入的热量。\n\n':'';
-  return controlledAgentResult(`${prefix}${dateNote}推荐：**${recipe.name}**\n\n食材：${ingredients}\n\n做法：\n${steps}\n\n预计耗时：${Number(recipe.minutes)||20}分钟；营养值约 ${Math.round(Number(nutrition.kcal)||0)} kcal、蛋白质 ${Number(nutrition.protein)||0}g。${uncertainties?`主要误差来源：${uncertainties}。`:''}`,'meal');
+  return controlledAgentResult(`${prefix}${dateNote}推荐：**${recipe.name}**\n\n食材：${ingredients}\n\n做法：\n${steps}\n\n预计耗时：${Number(recipe.minutes)||20}分钟；营养值约 ${Math.round(Number(nutrition.kcal)||0)} kcal、蛋白质 ${nutrition.protein==null?'未知':Number(nutrition.protein)+'g'}。${uncertainties?`主要误差来源：${uncertainties}。`:''}`,'meal');
 }
 function buildControlledAgentResult({message,routeIntent,mealScenario,ctx,dispatched,proposal}){
   const text=String(message||''),failed=dispatched.results.find(entry=>!entry.ok);
@@ -1280,9 +1297,9 @@ function buildControlledAgentResult({message,routeIntent,mealScenario,ctx,dispat
   const nutrition=controlledResultEntry(dispatched,'search_nutrition');
   if(nutrition?.ok){
     const value=nutrition.result?.nutrition;
-    if(!value)return controlledAgentResult(nutrition.result?.question||'USDA 没有找到合适记录，请补充更具体的名称或包装营养信息。');
+    if(!value)return controlledAgentResult(nutrition.result?.question||'台湾食药署 没有找到合适记录，请补充更具体的名称或包装营养信息。');
     const data=value.per100g||value;
-    return controlledAgentResult(`${data.name||value.name||nutrition.args.name}每100克约 ${Number(data.kcal)||0} kcal、蛋白质 ${data.protein==null?'未知':`${Number(data.protein)}g`}；来源：USDA FoodData Central；${value.originalName||value.name}（${value.id}）。${value.matchNote||''}`);
+    return controlledAgentResult(`${data.name||value.name||nutrition.args.name}每100克约 ${Number(data.kcal)||0} kcal、蛋白质 ${data.protein==null?'未知':`${Number(data.protein)}g`}；来源：台湾食药署食品营养成分资料集；${value.originalName||value.name}（${value.id}）。${value.matchNote||''}`);
   }
   const memory=controlledResultEntry(dispatched,'get_memory');
   if(memory?.ok){

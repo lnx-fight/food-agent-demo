@@ -33,7 +33,7 @@ npm start
 
 网址于 2026-10-16 更换为 `xiaofan-food.pages.dev`，继续使用同一个 D1；由于浏览器 Cookie 和本机暂存按域名隔离，新网址需重新登录，尚未同步的旧网址本机修改需先在旧网址完成同步。
 
-项目及数据库编号等非敏感配置位于 `cloudflare/project.json`。`.github/workflows/cloudflare.yml` 对 push 和 PR 执行语法检查、Node 回归测试、真实 workerd/D1 集成测试、USDA 导入校验和 30 条 Agent 数据集结构校验；只有 `main` 的 CI 通过，才下载同一次 CI 的构建产物、执行版本化 D1 迁移并发布 Pages。PR 和其他分支不部署生产环境，也不连接生产数据库。生产部署串行执行，发布后检查 `/api/health` 的中文食物和 USDA 数据量。
+项目及数据库编号等非敏感配置位于 `cloudflare/project.json`。`.github/workflows/cloudflare.yml` 对 push 和 PR 执行语法检查、Node 回归测试、真实 workerd/D1 集成测试、食药署导入校验和 30 条 Agent 数据集结构校验；只有 `main` 的 CI 通过，才下载同一次 CI 的构建产物、执行版本化 D1 迁移并发布 Pages。PR 和其他分支不部署生产环境，也不连接生产数据库。生产部署串行执行，发布后检查 `/api/health` 的食药署食品与营养明细数量。
 
 仓库 Actions Secret `CLOUDFLARE_API_TOKEN` 使用当前 Cloudflare 账号的 Pages Write + D1 Write 专用令牌；其权限范围是该账号的 Pages 与 D1 产品，并非单一项目。应用 API 密钥单独存于 Pages 生产 Secret。SSH 公钥只用于 Git 推送，不能代替 Cloudflare CI 令牌。CI 不运行需要真实模型密钥的付费 Agent 语义评测。
 
@@ -51,31 +51,31 @@ npm run deploy:pages
 
 资源管理和 D1 迁移使用 `cf`。当前固定版本 `cf@1.0.0-beta.17` 的 `cf pages deploy` 明确不支持此 Pages Direct Upload；仅上传步骤按该命令的提示调用固定版本 `npx wrangler@4.151.0 pages deploy --no-bundle`，不创建 Wrangler 配置。兼容日期与 `nodejs_compat`、生产 `DB` 绑定在 Pages 项目中配置；重建项目时需重新配置这些设置。Preview 不绑定生产 D1。
 
-初始化迁移 `migrations/0001_schema.sql` 创建业务表，后续迁移导入 USDA 数据及搜索索引；`0006_usda_only.sql` 删除旧中文估算食品、别名及网页候选表，只保留 USDA 营养数据。已发布的 `0002_foods.sql` 仅保留迁移历史，不得回改。迁移由 D1 记录，只执行尚未应用的文件；已发布迁移不得改写，应新增编号文件。现有本地 `data/nutrition.sqlite` 的个人账号和记录不会自动上传，线上从新账号开始。Pages 新密码使用带随机盐的 PBKDF2-SHA256（100,000 次，适配 Workers Web Crypto），本地原 scrypt 格式继续支持；旧 scrypt 账号若另行迁入 Pages，需先另行设计密码迁移，不能直接使用。
+初始化迁移 `migrations/0001_schema.sql` 创建业务表；`0007_tfda_schema.sql` 和 `0008_tfda_snapshot_*.sql` 导入食药署快照，`0009_tfda_activate.sql` 校验食品及营养明细数量后删除 USDA 表和搜索索引。当前仓库已移除旧 USDA 的 `0004_usda_snapshot.sql` 数据文件，既有 D1 中已经执行的迁移记录保留，新数据库跳过这份已停用快照。其他已发布的 schema/cleanup 迁移保持历史原状；后续数据更新须新增迁移。账号、历史确认的饮食、体重、对话及原始来源字段不重算、不删除。本地账号不会自动上传线上。Pages 密码使用 PBKDF2-SHA256（100,000 次），本地 scrypt 格式继续支持。
 
 Pages 采用请求触发的提醒检查和约一分钟重连的 SSE 快照，不运行常驻 Node 定时器；没有浏览器请求时不会定时推送，跨实例不共享内存 SSE 连接。生产 D1 备份应使用 Cloudflare 导出或 Time Travel；`scripts/manage-data.mjs` 仅管理本地 SQLite。回滚 Pages 代码不会回滚数据库；数据库迁移应向后兼容。
 
-D1 免费套餐当前提供每天 500 万行读取、10 万行写入和账号总计 5GB 存储；免费请求和 CPU 仍受 Pages Functions / Workers 限制，超额可能暂停服务。USDA 快照和 FTS5 索引约占 4.6MB。没有启用付费计划；千问、高德等外部服务按其自身规则计费。参见 [D1 定价](https://developers.cloudflare.com/d1/platform/pricing/)、[Pages Functions 定价](https://developers.cloudflare.com/pages/functions/pricing/)。
+D1 免费套餐当前提供每天 500 万行读取、10 万行写入和账号总计 5GB 存储；免费请求和 CPU 仍受 Pages Functions / Workers 限制，超额可能暂停服务。食药署完整明细按食品聚合为 JSON 保存，避免导入230,152条独立记录超出每日免费写入量；摘要与名称索引独立保存，普通检索无需读取完整明细。没有启用付费计划；千问、高德等外部服务按其自身规则计费。参见 [D1 定价](https://developers.cloudflare.com/d1/platform/pricing/)、[Pages Functions 定价](https://developers.cloudflare.com/pages/functions/pricing/)。
 
-## 已下载的 USDA 权威营养数据
+## 已导入的台湾食药署食品营养数据
 
-已从 [USDA FoodData Central 官方下载页](https://fdc.nal.usda.gov/download-datasets/) 下载 Foundation Foods（2026-04）、SR Legacy（2018-04 最终版）和 FNDDS（2021–2023，2024-10 发布），依据其 [CC0 授权](https://fdc.nal.usda.gov/) 保存原始压缩包、SHA-256、版本、来源和标准化快照。
+唯一内置食品库为卫生福利部食品药物管理署的[食品营养成分资料集](https://data.gov.tw/dataset/8543)。原始官方 ZIP 位于 `data/tfda/source.zip`，SHA-256、来源、下载快照日期和迁移校验和位于 `data/tfda/manifest.json`。依据[政府资料开放授权条款第1版](https://data.gov.tw/license)使用并署名：**卫生福利部食品药物管理署，2026，食品营养成分资料集（小饭下载快照2026-10-20）。简体名称及检索别名由小饭整理。** 网站发现页及营养结果展示来源、署名和授权链接。
 
-共 **13,588 条**有效食物/餐食记录，其中 **13,545 条**有热量；Foundation 原始 JSON 中另有 32 个空记录，未当成食物导入。未知热量、蛋白质等保持 NULL，明确的 0 继续保留。每条记录按 **每 100 克可食部**存储，区分 kcal 与 kJ；优先保留 USDA 的食物特定 Atwater 热量（2048），再使用通用 Atwater（2047）或原 kcal（1008），仅缺少 kcal 时以 kJ / 4.184 换算，并记录所用营养素编号。
+共 **2,213 个食品条目、230,152 条原始营养指标明细**，全部食品有可读取热量。`nutrition_foods` 保存简体名、繁体原名、英文名、原始俗名、样品描述和每100克可食部摘要；`nutrition_names` 建立名称/别名索引；`nutrition_nutrient_data` 按食品保存全部104项原始分析记录，包含单位、每100克含量、样本数、标准差及原始单位重/单位含量。空值保留为未知，明确的0仍是0；没有有效克重的“每单位”资料不用于按份换算。
 
-原包位于 `data/downloads/`，本地可直接打开的标准化 CSV 为 `data/usda/nutrition.csv`（这两项不提交 Git）；来源清单位于 `data/usda/manifest.json`，可复现 SQL 快照位于 `migrations/0004_usda_snapshot.sql`。重新下载和校验：`npm run data:download`；已有原包离线重建：`python3 scripts/import-usda.py --offline`。该脚本只准备快照，不直接写生产库，生产导入由后续 `npm run db:migrate` 完成。更新数据版本时应新增迁移，勿覆盖已经发布的快照。
+摘要优先读取官方“修正熱量”kcal，缺少时才读取“熱量”kcal，同时保留两种原值与能量口径，不按4/4/9自行覆盖官方数据。例如 `tfda:A0550601` 白饭为182 kcal/100g（修正热量），其原始“熱量”为183；蛋白质3.1g。地区配方和含水量不同，不以旧USDA米饭130 kcal替换本快照数值。
 
-`authoritative_foods` 保存 USDA 原始英文名、营养值、FDC 编号、版本和可追溯 URL，FTS5 提供全文搜索。唯一内置营养数据集为 USDA；旧 300 条中文估算食品及其运行时种子 `data/foods.json` 已删除。`data/usda/chinese-foods.json` 仅维护中文名称/别名、类别与 FDC 编号，不存营养值。
+`nutrition-names.mjs` 使用固定版 OpenCC 进行简繁转换；`data/tfda/aliases.json` 只增加核对过的名称与整合编号，不存营养值。“米饭/白飯”“土豆/馬鈴薯”“西红柿/红番茄”“鸡胸肉/去皮清肉平均值”可直接查询，显示匹配的完整样品名和生熟提示。中文名称及完整英文原名均在本地查询，不调用千问或USDA API。旧 `fdc:` 查询明确提示数据已移除。
 
-登录后可使用 `/api/nutrition/search?q=米饭` 查询中文映射，或 `q=fdc:168878` 精确读取熟长粒白米饭（130 kcal/100g）。中文“汉堡”自动命中 USDA 通用汉堡；“牛肉汉堡”“芝士汉堡”“鸡腿汉堡”“炸鸡汉堡”按名称匹配各自品类，不再弹三选一。USDA 通用鸡肉汉堡未细分鸡腿/鸡胸，“鸡腿汉堡”会明确标注通用鸡肉参考，不冒充精确部位或品牌配方。`resolve` 与 `search` 使用同一流程，`dataset-search` 提供结果列表接口。
+本库主要为食材、加工食品及部分成品，**没有回锅肉等完整中餐菜单覆盖**。肉粽、冷冻虾仁炒饭可按原名直接读取；“虾仁炒饭”不能自动套用冷冻包装产品，“麻婆豆腐”不能套用麻婆酱，“牛肉汉堡”不能套用冷冻汉堡肉或面包。官方“汉堡包”条目实际为面包，结果会明确提示不包含夹馅。生熟、冷冻和配方限定不通过删词隐藏，不将整菜降为单一食材估值。
 
-所有营养查询统一通过中文检索层：中文别名直接定位 FDC 条目，其他已收录词汇转换完整检索词（包含生熟和配方词），再在 USDA 快照内全文检索和排序，自动返回参考记录；营养查询不再调用千问转换名称，词库未覆盖时直接提示未匹配，可补充英文原名或 FDC 编号；不采用模型生成的营养值或 FDC 编号，不把复合菜降为单一食材。英文全文检索同样自动匹配，普通查询优先通用记录，避免未指定品牌却命中品牌配方；自动搜索结果标为参考匹配、medium 置信度。显示中文名、英文原文、来源与配方提示，不保证精确覆盖所有中餐；无匹配时请用户补充名称或手动填写包装信息。固定映射、离线中文检索、英文检索及 FDC 精确读取均不需要 USDA API Key 或模型额度。词汇转换时有未知部分会拒绝局部匹配；普通水果优先匹配鲜果，防止草莓匹配成果奶，词形比较避免 pea/peanut 等前缀混淆。
+重建快照：`npm run data:download -- --offline`。原包校验不一致时脚本拒绝导入；数据更新需人工审阅并新增迁移，不覆盖已经部署的快照。脚本通过22个小于1MB的迁移文件准备完整数据；最后数量校验通过后才删除旧USDA表。图片识别、DIY、菜单、文字记餐和 Agent 营养 Tool 均改读食药署。用户仍可按实际包装标签手动记录。
 
-图片分析、DIY、菜单和文字记餐改为读取 USDA；第三方条码和自动网页营养估值停用，用户仍可按实际包装标签手动记录。账号和已确认历史摄入保留，不因切换营养库重算。旧代码依赖被删除的食品表，因此本次迁移后不能直接回滚到旧版本，需修复前进或同时恢复数据库。
+API示例：`/api/nutrition/search?q=米饭`、`/api/nutrition/search?q=tfda:R0400101`；`/api/nutrition/details?q=tfda:A0550601` 返回完整104项原始营养明细及简体指标名称。这些接口均要求登录。历史记录保留原来的数值和来源，包括旧USDA引用；不再作为新查询的数据源。升级前已备份本地数据库。切换后回滚旧代码需同时恢复相应食品数据库，优先修复前进。
 
 ## 发布面试演示到 GitHub Pages
 
-本仓库根目录已包含静态入口文件，GitHub Pages 会自动启用面试演示模式：页面不请求 `/api/*`，以预置响应演示餐厅、计划和 Agent 对话；真实 USDA 查询、图片分析和按食材生成食谱需要登录正式服务，演示模式不再提供虚构营养查值。
+本仓库根目录已包含静态入口文件，GitHub Pages 会自动启用面试演示模式：页面不请求 `/api/*`，以预置响应演示餐厅、计划和 Agent 对话；真实食药署查询、图片分析和按食材生成食谱需要登录正式服务，演示模式不再提供虚构营养查值。
 
 1. 将本次改动推送到 `main` 分支；
 2. 打开 GitHub 仓库的 **Settings → Pages**；
@@ -93,7 +93,6 @@ D1 免费套餐当前提供每天 500 万行读取、10 万行写入和账号总
 
 ```text
 DASHSCOPE_API_KEY=...        # 启用真实 Agent 对话、视觉识别与联网降级
-USDA_API_KEY=...             # 可选：长尾食材查询
 AMAP_WEB_SERVICE_KEY=...     # 可选：附近餐馆
 ```
 
@@ -101,7 +100,7 @@ AMAP_WEB_SERVICE_KEY=...     # 可选：附近餐馆
 
 公开服务的静态资源由 `public-files.mjs` 白名单控制，只提供网页、脚本和样式；`.env`、Git 文件、服务端源码、SQLite 数据库及其他个人文件不对外提供。新增浏览器资源时，需要同步更新该白名单及适用的 PWA 缓存列表。公开托管时只上传产品源码，勿上传本地 `.env`、数据库、备份和个人文件。完整功能版的全部业务接口均要求登录，服务器根据会话确定数据所属账号，不信任客户端传入的 `clientId`。
 
-Render 默认文件系统是临时的；没有持久磁盘时，账号、密码哈希、会话和用户记录都会随重启或部署丢失。不得用临时文件系统承载正式账号。当前 SQLite 方案只运行单个服务实例；需要多实例时应迁移到共享数据库。USDA 数据首次启动由版本化快照初始化，账号和用户记录保存在持久目录中。参见 [Render 持久磁盘说明](https://render.com/docs/disks)。
+Render 默认文件系统是临时的；没有持久磁盘时，账号、密码哈希、会话和用户记录都会随重启或部署丢失。不得用临时文件系统承载正式账号。当前 SQLite 方案只运行单个服务实例；需要多实例时应迁移到共享数据库。食药署数据首次启动由版本化快照初始化，账号和用户记录保存在持久目录中。参见 [Render 持久磁盘说明](https://render.com/docs/disks)。
 
 线上必须通过 HTTPS 访问，生产环境会话 Cookie 强制 `Secure`。可设置 `PUBLIC_ORIGIN=https://实际域名` 固定可信来源，不能带结尾斜杠；自定义域名切换时同步修改。写接口同时验证来源、自定义请求头和 JSON 类型；不要开放通配 CORS。只有确认代理会覆盖 `X-Forwarded-For` 时才启用 `TRUST_PROXY=true`，否则登录限流按直接连接地址统计。
 
@@ -139,7 +138,6 @@ QWEN_VISION_MODEL=qwen3-vl-flash # 图片餐食识别专用视觉模型
 QWEN_WEB_MODEL=qwen-plus
 QWEN_CHAT_MODEL=qwen-plus
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-USDA_API_KEY=...            # FoodData Central长尾食材查询
 AMAP_WEB_SERVICE_KEY=...    # 高德附近餐馆POI
 QWEN_EMBED_MODEL=text-embedding-v3 # 可选：语义记忆嵌入模型
 AGENT_MAX_TOOL_ROUNDS=6     # 可选：单次Agent执行的最大工具轮次
@@ -147,7 +145,7 @@ AGENT_MAX_TOOL_ROUNDS=6     # 可选：单次Agent执行的最大工具轮次
 
 `QWEN_VISION_MODEL` 与 `QWEN_WEB_MODEL` / `QWEN_CHAT_MODEL` 职责分离：上传餐食图片时仅调用视觉模型，文字对话与联网检索继续调用文本模型。修改 `.env` 后需重启 `npm start` 才会生效。
 
-`/api/health` 会返回千问、USDA 和高德的配置状态。未配置千问时，Agent 对话和图片识别会明确报出服务未配置；DIY 食谱和今日三餐计划则会降级为基于 USDA 食材数据的确定性规则建议，并在界面标记为“规则建议”。
+`/api/health` 会返回千问、食药署数据和高德的配置状态。未配置千问时，Agent 对话和图片识别会明确报出服务未配置；DIY 食谱和今日三餐计划则会降级为基于 食药署食材数据的确定性规则建议，并在界面标记为“规则建议”。
 
 当前可真实操作：
 
@@ -157,19 +155,19 @@ AGENT_MAX_TOOL_ROUNDS=6     # 可选：单次Agent执行的最大工具轮次
 - 在“今日”查看 Agent 当前判断的下一最佳行动，并从周计划直接进入下一餐决策；
 - 记录、更新每日体重；
 - 手动、拍照记录、修改和删除饮食，并在确认后更新当日预算；
-- 使用家中现有食材生成动态DIY食谱，并由 USDA 营养数据校验食材克数、热量和三大营养素；
+- 使用家中现有食材生成动态DIY食谱，并由 食药署营养数据校验食材克数、热量和三大营养素；
 - 根据真实档案计算BMI、目标BMI、计划速度、基础能量估算和蛋白质参考值；
 - 让Agent通过真实千问模型读取当前档案、最近对话及历史记录回答问题；
 - 通过唯一的 `next-meal-decision` Skill 处理复杂下一餐决策；计划滚动更新由确定性状态机负责，不依赖模型生成计划补丁；
 - 保存每轮 Agent 的目标、执行步骤、工具结果和待确认状态，并在“工具日志”中查看近期执行记录；
 - 根据时间、未记录餐次和目标进度创建主动任务，通过 SSE 推送到当前浏览器；基于体重趋势和记录完整度进行每日复盘；
 - 查询本地SQLite营养库；
-- 唯一内置营养数据集为13,588条USDA记录，中文名称通过FDC映射或英文检索自动匹配；原300条估算食品库已删除；
+- 唯一内置营养数据集为2,213条食药署食品和230,152条营养明细，支持简繁体、英文原名及常见别名；USDA和旧估算库已移除；
 - 配置阿里云百炼千问后进行真实图片食物识别；中文营养检索独立于模型服务；
 - 配置高德后使用浏览器定位查询真实附近餐馆；
 - 对用户上传的菜单图片、粘贴的菜单文字或公开菜单链接进行按需完整解析，保留分类、菜名、价格、来源与完整性状态，再按当前餐次预算排序；
 - 优先使用高德POI `business.tag` 返回的特色菜；没有特色菜时使用千问联网检索核验公开菜单，仍无法确认才明确降级为“按店型推荐”；
-- 外食推荐会读取当前减脂计划和今日摄入，匹配 USDA 食品记录，以单一近似热量、蛋白质、距离、口味和忌口进行个性化排序；
+- 外食推荐会读取当前减脂计划和今日摄入，匹配 食药署食品记录，以单一近似热量、蛋白质、距离、口味和忌口进行个性化排序；
 - 使用在家DIY与外食推荐流程；
 - 经用户主动开启后，根据餐前、记录中断、计划偏离和周计划状态创建提醒；支持每日上限、免打扰时段、稍后处理、接受与忽略；
 - 在服务端同步可用时跨刷新恢复档案、记录、对话、自然周计划、提醒设置、菜单导入与 Agent 记忆。
@@ -207,11 +205,11 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 
 菜单图片/文字解析属于 Tool，首次生成固定自然周计划与主动提醒属于 workflow，BMI、热量、营养、餐后分配和日终趋势判断由确定性程序负责，它们不单独拆成 Skill。
 
-本地 USDA 数据与用户状态位于 `data/nutrition.sqlite`，线上使用 D1。启动时清理旧食品估算表，USDA 首次按迁移初始化，后续不覆盖用户记录。中文检索映射只保存名称和 FDC 编号，营养值始终读取 USDA。图片识别、菜单解析和附近餐馆在配置密钥后调用真实接口；没有合适 USDA 条目时显示未匹配，不以单一食材或旧近似菜编造完整菜品营养。DIY 模型不可用时使用已匹配 USDA 食材的规则模板。美团等交易平台未接入，任意餐馆菜单不保证实时完整，用户可提供菜单图片、文字或公开链接。
+本地食药署数据与用户状态位于 `data/nutrition.sqlite`，线上使用 D1。启动时清理旧食品估算表，食药署首次按迁移初始化，后续不覆盖用户记录。中文检索映射只保存名称和食药署整合编号，营养值始终读取食药署。图片识别、菜单解析和附近餐馆在配置密钥后调用真实接口；没有合适食药署条目时显示未匹配，不以单一食材或旧近似菜编造完整菜品营养。DIY 模型不可用时使用已匹配 食药署食材的规则模板。美团等交易平台未接入，任意餐馆菜单不保证实时完整，用户可提供菜单图片、文字或公开链接。
 
 ## Agent 评测
 
-项目使用 `next-meal-decision` 处理下一餐决策。此前引入的 health-coach 饮食资料与375条社区食品参考记录已移除，营养查询仅使用 USDA 及中文名称映射。服务启动时删除已停用的 `reference_foods` 表；已确认的用户饮食和体重记录继续保留。
+项目使用 `next-meal-decision` 处理下一餐决策。此前引入的 health-coach 饮食资料与375条社区食品参考记录已移除，营养查询仅使用食药署 及中文名称映射。服务启动时删除已停用的 `reference_foods` 表；已确认的用户饮食和体重记录继续保留。
 
 项目在 [EVALUATION.md](./EVALUATION.md) 中定义下一餐推荐 Agent 的评测对象与能力边界，并在 [METRICS.md](./METRICS.md) 中定义指标公式、大模型裁判评分锚点和发布判定。首版 Agent 行为评测集包含 30 条样本，正样本、负样本、边界/模糊样本、异常样本和对抗样本各 6 条；外部 Tool 使用仅在测试环境生效的固定 fixture，避免网络与数据波动污染模型评测结果。
 
@@ -239,10 +237,11 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 | `GET /api/account/export` | 导出当前账号的个人数据 |
 | `POST /api/account/clear`、`POST /api/account/delete` | 校验密码及确认文字后清空记录或注销账号 |
 | `GET /api/health` | 查看服务和密钥配置状态 |
-| `GET /api/nutrition/search?q=`、`GET /api/nutrition/resolve?q=` | USDA 中文/英文自动匹配与 FDC 编号精确读取 |
+| `GET /api/nutrition/search?q=`、`GET /api/nutrition/resolve?q=` | 食药署简繁体/英文自动匹配与 TFDA 整合编号精确读取 |
+| `GET /api/nutrition/details?q=tfda:整合编号` | 完整营养明细、单位和样本资料 |
 | `GET /api/nutrition/barcode/:code` | 已停用（410），可按包装标签手动输入 |
-| `POST /api/nutrition/web-search` | 已停用（410），统一使用 USDA |
-| `POST /api/meals/analyze` | 真实视觉识别并自动匹配 USDA |
+| `POST /api/nutrition/web-search` | 已停用（410），统一使用食药署 |
+| `POST /api/meals/analyze` | 真实视觉识别并自动匹配食药署 |
 | `POST /api/recipes/diy` | 匹配现有食材、生成DIY食谱并由服务端计算营养 |
 | `POST /api/agent/chat` | 使用真实LLM结合用户状态和最近对话生成回答与受控动作 |
 | `GET /api/restaurants/nearby` | 定位坐标转换及高德周边POI |
