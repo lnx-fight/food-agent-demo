@@ -20,7 +20,7 @@ let failure;
 for(let attempt=0;attempt<12;attempt++){
   try{
     const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(15000)}),data=await response.json();
-    if(!response.ok||data.ok!==true||data.foodCount!==0||data.nutritionSource!=='TFDA'||data.authoritativeFoodCount!==manifest.totalRows||data.nutrientRecordCount!==manifest.nutrientRows||data.seedRecipeCount!==recipeSeed.recipes.length||data.recipeReuse!==true)throw new Error(`Health check failed: HTTP ${response.status}`);
+    if(!response.ok||data.ok!==true||data.foodCount!==0||data.nutritionSource!=='TFDA'||data.authoritativeFoodCount!==manifest.totalRows||data.nutrientRecordCount!==manifest.nutrientRows||data.seedRecipeCount!==recipeSeed.recipes.length||data.recipeReuse!==true||data.recipeModel!=='qwen3.7-flash')throw new Error(`Health check failed: HTTP ${response.status}`);
     console.log(`Verified ${url}: Retired Chinese foods=${data.foodCount}, TFDA foods=${data.authoritativeFoodCount}, nutrient records=${data.nutrientRecordCount}, recipes=${data.recipeCount}`);
     failure=null;break;
   }catch(error){failure=error;await new Promise(resolve=>setTimeout(resolve,5000))}

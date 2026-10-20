@@ -16,7 +16,7 @@ const input={ingredients:['鸡胸肉','西红柿'],pantry:[],cookTime:'20分钟'
 const valid={name:'番茄鸡胸肉',ingredients:[{name:'去皮清肉平均值',grams:150},{name:'红番茄',grams:150}],steps:['将去皮清肉平均值切成薄片，红番茄洗净切块。','锅中加入少量水，放入去皮清肉平均值和红番茄，加热至鸡肉完全熟透。'],minutes:15,waterMl:30};
 async function withModel(plan,run){
   const original=globalThis.fetch,key=process.env.DASHSCOPE_API_KEY;process.env.DASHSCOPE_API_KEY='test-only';let calls=0;
-  globalThis.fetch=async()=>{calls++;return Response.json({choices:[{message:{content:JSON.stringify(plan)}}]})};
+  globalThis.fetch=async(url,options)=>{calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,process.env.QWEN_RECIPE_MODEL||'qwen3.7-flash');assert.equal(payload.enable_thinking,false);return Response.json({choices:[{message:{content:JSON.stringify(plan)}}]})};
   try{return await run(()=>calls)}finally{globalThis.fetch=original;process.env.DASHSCOPE_API_KEY=key}
 }
 test('预置菜命中不调用模型，按实际可用油品重新计算，不添加未勾选的调料',async()=>{
@@ -33,7 +33,7 @@ test('预置菜命中不调用模型，按实际可用油品重新计算，不�
 test('未命中调用一次模型，通过校验后入库，别名/顺序变化复用并重算当前目标',async()=>{
   await withModel(valid,async calls=>{
     const first=await createDiyRecipe(input);assert.equal(first.generatedBy,'qwen');assert.equal(first.cache.status,'saved');assert.equal(calls(),1);
-    const stored=db.prepare('SELECT * FROM recipes WHERE id=?').get(first.recipe.id);assert.equal(stored.origin,'llm');assert.equal(db.prepare('SELECT COUNT(*) n FROM recipe_ingredients WHERE recipe_id=?').get(first.recipe.id).n,2);
+    const stored=db.prepare('SELECT * FROM recipes WHERE id=?').get(first.recipe.id);assert.equal(stored.origin,'llm');assert.equal(JSON.parse(stored.provenance).model,process.env.QWEN_RECIPE_MODEL||'qwen3.7-flash');assert.equal(db.prepare('SELECT COUNT(*) n FROM recipe_ingredients WHERE recipe_id=?').get(first.recipe.id).n,2);
     const next=await createDiyRecipe({...input,ingredients:['西红柿','生鸡胸肉']});assert.equal(next.generatedBy,'library');assert.equal(next.recipe.id,first.recipe.id);assert.equal(calls(),1);assert.deepEqual(next.recipe.nutrition,first.recipe.nutrition);
     const changed=await createDiyRecipe({...input,profile:{tastePreference:'不辣',allergies:'鸡肉'}});assert.notEqual(changed.recipe.id,first.recipe.id);assert.ok(changed.recipe.ingredients.every(item=>!item.name.includes('清肉')));
   });

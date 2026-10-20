@@ -144,12 +144,15 @@ cp .env.example .env
 DASHSCOPE_API_KEY=...        # 阿里云百炼API Key
 QWEN_VISION_MODEL=qwen3-vl-flash # 图片餐食识别专用视觉模型
 QWEN_WEB_MODEL=qwen-plus
+QWEN_RECIPE_MODEL=qwen3.7-flash
 QWEN_CHAT_MODEL=qwen-plus
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 AMAP_WEB_SERVICE_KEY=...    # 高德附近餐馆POI
 QWEN_EMBED_MODEL=text-embedding-v3 # 可选：语义记忆嵌入模型
 AGENT_MAX_TOOL_ROUNDS=6     # 可选：单次Agent执行的最大工具轮次
 ```
+
+`QWEN_RECIPE_MODEL` 独立控制在家DIY及Agent菜谱工具，默认 `qwen3.7-flash`，使用现有非思考模式和JSON输出；未命中D1时才调用，保存的模型来源记录实际选定模型。生产默认值随代码发布，Cloudflare绑定可覆盖；不复用联网检索的模型配置。
 
 `QWEN_VISION_MODEL` 与 `QWEN_WEB_MODEL` / `QWEN_CHAT_MODEL` 职责分离：上传餐食图片时仅调用视觉模型，文字对话与联网检索继续调用文本模型。修改 `.env` 后需重启 `npm start` 才会生效。
 

@@ -199,7 +199,7 @@ async function createDiyRecipe(input){
     try{
       const foodData=availableFoods.map(x=>({name:x.name,category:x.category,kcalPer100g:x.kcal,proteinPer100g:x.protein,fatPer100g:x.fat,carbsPer100g:x.carbs}));
       const preferenceText=JSON.stringify({taste:context.requirements.taste,preferences:context.requirements.preferences,excluded:context.requirements.blocked,vegan:context.requirements.vegan,vegetarian:context.requirements.vegetarian});
-      const d=await qwenChat({model:env.QWEN_WEB_MODEL||'qwen-plus',response_format:{type:'json_object'},messages:[{role:'user',content:`根据以下真实可用食材生成一人份${targets.mealType}。${budgetPrompt}不需要使用全部食材，只选择适合的部分。只能使用数据库列表中的食材以及水，不得添加未列出的油、盐、糖、调味料或装饰。有热量调料如使用必须出现在ingredients并给实际克数，食用油建议0–10g；勾选调料不要求全部加入。时间不超过${context.minutes}分钟，厨具为${String(input.cookTools||'普通厨具')}，只使用这些厨具。用户要求：${preferenceText}。过敏与忌口是硬约束。口味偏好只有可用食材能实现时才采用。不要写个人姓名、身体数据或私人信息。食材数据库：${JSON.stringify(foodData)}。只返回JSON：{"name":"","ingredients":[{"name":"必须与数据库name完全一致","grams":100}],"steps":[""],"waterMl":0,"minutes":20,"reason":"","uncertainties":[""]}。必须提供正数克数、完整步骤和合理用时。营养由服务器计算，不要提供营养数字。`}]});
+      const d=await qwenChat({model:env.QWEN_RECIPE_MODEL||'qwen3.7-flash',response_format:{type:'json_object'},messages:[{role:'user',content:`根据以下真实可用食材生成一人份${targets.mealType}。${budgetPrompt}不需要使用全部食材，只选择适合的部分。只能使用数据库列表中的食材以及水，不得添加未列出的油、盐、糖、调味料或装饰。有热量调料如使用必须出现在ingredients并给实际克数，食用油建议0–10g；勾选调料不要求全部加入。时间不超过${context.minutes}分钟，厨具为${String(input.cookTools||'普通厨具')}，只使用这些厨具。用户要求：${preferenceText}。过敏与忌口是硬约束。口味偏好只有可用食材能实现时才采用。不要写个人姓名、身体数据或私人信息。食材数据库：${JSON.stringify(foodData)}。只返回JSON：{"name":"","ingredients":[{"name":"必须与数据库name完全一致","grams":100}],"steps":[""],"waterMl":0,"minutes":20,"reason":"","uncertainties":[""]}。必须提供正数克数、完整步骤和合理用时。营养由服务器计算，不要提供营养数字。`}]});
       plan=parseJsonText(responseText(d));
       const used=validateRecipePlan(plan,availableFoods,context),unsupported=unsupportedFoodMentions(plan,used);
       if(unsupported.length)throw new Error('步骤出现未列入配料的食材');
@@ -211,7 +211,7 @@ async function createDiyRecipe(input){
   const recipe=calculateRecipeNutrition(plan,availableFoods);
   if(generatedBy==='qwen'&&cacheAllowed){
     try{
-      cache=await saveGeneratedRecipe(db,plan,availableFoods,context,{release:NUTRITION_MANIFEST.release,model:env.QWEN_WEB_MODEL||'qwen-plus'});
+      cache=await saveGeneratedRecipe(db,plan,availableFoods,context,{release:NUTRITION_MANIFEST.release,model:env.QWEN_RECIPE_MODEL||'qwen3.7-flash'});
       if(cache.recipeId){
         if(!cache.inserted){const winner=await findReusableRecipe(db,availableFoods,context,{allowSeeds:false});if(winner)Object.assign(recipe,calculateRecipeNutrition(winner.plan,availableFoods))}
         recipe.id=cache.recipeId;
@@ -419,7 +419,7 @@ async function api(req,res,url){
     if(url.pathname.endsWith('/details')){const result=await catalogDetails(db,url.searchParams.get('id'));return json(res,result?200:404,result?{ok:true,result}:{error:'当前数据库未收录此食品'});}
     return json(res,200,{ok:true,...await browseFoods(db,Object.fromEntries(url.searchParams))});
   }
-  if(req.method==='GET'&&url.pathname==='/api/health'){const count=await db.prepare('SELECT COUNT(*) count,SUM(nutrient_count) nutrient_rows FROM nutrition_foods').get();const recipes=await db.prepare("SELECT COUNT(*) count,SUM(CASE WHEN origin='seed' THEN 1 ELSE 0 END) seed_count FROM recipes").get();return json(res,200,{ok:true,recipeCount:recipes.count,seedRecipeCount:recipes.seed_count,recipeReuse:true,services:{qwen:!!env.DASHSCOPE_API_KEY,tfda:true,usda:false,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'TFDA',foodCount:0,authoritativeFoodCount:count.count,nutrientRecordCount:count.nutrient_rows,datasetRelease:NUTRITION_MANIFEST.release})}
+  if(req.method==='GET'&&url.pathname==='/api/health'){const count=await db.prepare('SELECT COUNT(*) count,SUM(nutrient_count) nutrient_rows FROM nutrition_foods').get();const recipes=await db.prepare("SELECT COUNT(*) count,SUM(CASE WHEN origin='seed' THEN 1 ELSE 0 END) seed_count FROM recipes").get();return json(res,200,{ok:true,recipeCount:recipes.count,seedRecipeCount:recipes.seed_count,recipeReuse:true,recipeModel:env.QWEN_RECIPE_MODEL||'qwen3.7-flash',services:{qwen:!!env.DASHSCOPE_API_KEY,tfda:true,usda:false,amap:!!env.AMAP_WEB_SERVICE_KEY,openFoodFacts:false},nutritionSource:'TFDA',foodCount:0,authoritativeFoodCount:count.count,nutrientRecordCount:count.nutrient_rows,datasetRelease:NUTRITION_MANIFEST.release})}
   if(req.method==='GET'&&url.pathname==='/api/nutrition/details'){const result=await authoritativeFoodDetails(db,url.searchParams.get('q'));return json(res,result?200:404,result?{ok:true,result}:{ok:false,error:'未找到食药署食品明细'})}
   if(req.method==='GET'&&['/api/nutrition/dataset-search','/api/nutrition/search','/api/nutrition/resolve'].includes(url.pathname)){
     const q=(url.searchParams.get('q')||'').trim();if(!q)return json(res,400,{error:'缺少q'});
