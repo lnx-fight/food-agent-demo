@@ -250,7 +250,7 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 | `GET /api/food-catalog`、`GET /api/food-catalog/categories`、`GET /api/food-catalog/details` | 免会话、免建档的热量表搜索、分类分页及营养详情 |
 | `GET /api/nutrition/search?q=`、`GET /api/nutrition/resolve?q=` | 食药署简繁体/英文自动匹配与 TFDA 整合编号精确读取 |
 | `GET /api/nutrition/details?q=tfda:整合编号` | 完整营养明细、单位和样本资料 |
-| `GET /api/nutrition/barcode/:code` | 已停用（410），可按包装标签手动输入 |
+| `GET /api/nutrition/barcode/:code` | 查询当前用户补录商品；未收录返回404 |
 | `POST /api/nutrition/web-search` | 已停用（410），统一使用食药署 |
 | `POST /api/meals/analyze` | 真实视觉识别并自动匹配食药署 |
 | `GET /api/recipes?q=`、`GET /api/recipes/details?id=home-001` | 直接读取D1预置家常菜，返回食材编号/克数、步骤及每道配方营养；不调用模型 |
@@ -302,3 +302,18 @@ Router 只在用户需要一顿具体餐食时命中该 Skill。每次确认记�
 - 手动营养、未匹配食材、缺失宏量营养、模型失败或校验失败都不进入共享缓存。模型不可用时保留规则建议，规则建议不冒充LLM生成入库。免费额度耗尽时返回 `model_quota_exhausted`，页面及Agent明确说明未保存为新菜谱。不会写入个人饮食记录，仍需用户点击采用。
 
 预置菜仍是一份菜，不保证单菜覆盖整餐预算；生成结果的自动校验涵盖数据和约束，不等同于逐道试做或营养师审核。
+
+## 包装食品扫码与标签补录
+
+食物热量表和记餐弹窗新增“扫包装条码”入口。条码在浏览器本地通过固定版ZXing识别，支持后摄像头、条码照片和手动输入EAN-8、UPC-A、EAN-13、GTIN-14；通过校验位检查后统一补零到14位保存。扫码本身不请求模型，相机在关闭弹窗、切后台或25秒超时后停止。
+
+第一版采用“D1私有商品库→未收录拍营养标签/手填→核对确认→保存→填写实际食用量→去确认记餐”。未接入外部商品库，第一次扫描未收录商品需补录。仅使用功能时按现有个人流程连接浏览器身份并建档，普通热量表查询保持免建档。
+
+- `0014_packaged_foods.sql`创建独立的`packaged_foods`，账号ID和GTIN联合主键；不进入TFDA/公共库，不跨用户共享。“我的数据”导出、清空和删除包含补录商品。
+- `GET /api/nutrition/barcode/:code`、`POST /api/packaged-foods`、`POST /api/packaged-foods/delete`、`POST /api/packaged-foods/label`均要求浏览器会话。所有者仅从服务端会话获取，保存要求`confirmed:true`。
+- 标签识别使用`QWEN_VISION_MODEL`。照片缩放后发送用于转录，不存入D1；用户须对照照片核对单位、标签基准和数值。服务不可用时可手填，空项保持未知，不补零。
+- 能量保留原值并按`kcal=kJ/4.184`换算。区分克/毫升/份，只有明确每份重量才可跨份换算，不能把毫升直接当克；不会默认整袋食用量。
+- 保存商品不写饮食日志。“去确认记餐”只带入已填写的实际用量、热量和蛋白质，须再确认日期/餐次后保存；未知蛋白质保留`proteinKnown:false`。修改食品名或手填营养解除来源绑定。
+- 浏览器源文件为`frontend/packaged-foods.js`、`frontend/barcode-scanner.js`，执行`npm run barcode:build`生成前端资源；版本由锁文件固定，许可证见`BARCODE-LICENSES.txt`。PWA v33预缓存扫码资源，API不离线缓存。
+
+相机需要HTTPS及用户授权；电脑无相机可上传照片或手输。真实手机相机与标签识别效果仍需实机验收，当前浏览器控制设置关闭。

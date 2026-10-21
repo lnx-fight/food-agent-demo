@@ -314,7 +314,24 @@ async function resumeCatalogFood(){
   recalculateBarcodeNutrition();
 }
 document.addEventListener('xiaofan:food-selected',resumeCatalogFood);
-function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference','nutritionSourceUrl','referenceLabel','lookupToken'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.step='1';$('#nutritionLookupStatus').textContent=''}
+let pendingPackagedOpen=false;
+window.XiaofanOpenPackaged=async()=>{
+  if(DEMO_MODE){showToast('包装食品需要连接云端，请在正式站使用。');return}
+  pendingPackagedOpen=true;pendingPersonalView='meals';
+  if(!accountReady&&!await window.XiaofanDevice.start()){pendingPackagedOpen=false;return}
+  if(!userData?.profile?.age){initOnboarding();return}
+  pendingPackagedOpen=false;window.XiaofanPackaged?.open();
+};
+window.XiaofanRecordPackaged=({product,amount,unit,nutrition})=>{
+  if(!userData?.profile?.age)return;
+  openMealRecord();const form=$('#manualMealForm');form.elements.name.value=[product.brand,product.name].filter(Boolean).join(' ');
+  form.elements.unit.value=unit;form.elements.grams.min='0.01';form.elements.grams.max='10000';form.elements.grams.step='any';form.elements.grams.value=amount;
+  form.elements.calories.value=nutrition.kcal;form.elements.protein.step='any';form.elements.protein.value=nutrition.protein??'';
+  form.dataset.nutritionSource='PACKAGED_LABEL';form.dataset.matchedReference=product.barcode;form.dataset.referenceLabel=product.name;form.dataset.nutritionBasis='packaged';form.dataset.packagedProduct=JSON.stringify(product);
+  recalculateBarcodeNutrition();$('#nutritionLookupStatus').textContent='已带入你核对过的包装标签与实际食用量，请确认日期、餐次后保存。';
+};
+
+function clearMealNutritionState(form){for(const key of ['kcalPer100','proteinPer100','nutritionBasis','nutritionSource','matchedReference','nutritionSourceUrl','referenceLabel','lookupToken','packagedProduct'])delete form.dataset[key];form.elements.grams.min='1';form.elements.grams.max='3000';form.elements.grams.step='1';$('#nutritionLookupStatus').textContent=''}
 function daysBetween(a,b){ return Math.max(1,Math.ceil((new Date(b)-new Date(a))/86400000)); }
 function calculateProfile(profile){
   const h=profile.height/100;
@@ -379,7 +396,7 @@ $('#onboardingForm').addEventListener('submit',e=>{
   e.preventDefault();if(!validateStep(3))return;
   const profile=onboardingValues();
   userData={profile,weightLogs:[{date:localDateKey(),weight:profile.weight,createdAt:new Date().toISOString()}],mealLogs:[],chatHistory:[],weeklyPlan:null,pendingWeeklyPlan:null,upcomingWeeklyPlan:null,weeklyPlanHistory:[],dayClosures:[],reminderSettings:{enabled:false,maxPerDay:3,quietStart:'22:00',quietEnd:'08:00'},menuImports:[],createdAt:new Date().toISOString()};
-  saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showView(pendingPersonalView);showToast('建档完成，Agent已生成你的第一份计划');resumeCatalogFood();
+  saveUser();$('#onboarding').classList.add('hidden');hydrateApp();showView(pendingPersonalView);showToast('建档完成，Agent已生成你的第一份计划');resumeCatalogFood();if(pendingPackagedOpen)window.XiaofanOpenPackaged();
 });
 
 function hydrateApp(){
@@ -464,7 +481,7 @@ $('#mealHistoryAdd').onclick=()=>openMealRecord(state.mealHistoryDate||localDate
 
 function renderMealLogs(){
   if(!userData)return;const meals=todayMeals(),list=$('#mealList');
-  const rows=[];for(const type of ['早餐','午餐','晚餐']){const records=meals.filter(x=>normalizeClientMealType(x.type)===type);if(!records.length)rows.push(`<div class="meal-row empty"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>未记录</p></div><div class="meal-history-actions"><button data-add-today-type="${type}">记录</button><button data-skip-today-type="${type}">未吃</button></div></div>`);else rows.push(...records.map(x=>x.status==='skipped'?`<div class="meal-row empty skipped"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>本餐未吃 · 已确认</p></div><button data-delete-meal="${x.id}">撤销</button></div>`:`<div class="meal-row"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.protein}g蛋白质</small></span><button data-delete-meal="${x.id}">×</button></div>`))}const other=meals.filter(x=>normalizeClientMealType(x.type)==='其他摄入');rows.push(...other.map(x=>`<div class="meal-row"><span class="meal-emoji snack">◇</span><div><strong>其他摄入</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.protein}g蛋白质</small></span><button data-delete-meal="${x.id}">×</button></div>`));list.innerHTML=rows.join('');
+  const rows=[];for(const type of ['早餐','午餐','晚餐']){const records=meals.filter(x=>normalizeClientMealType(x.type)===type);if(!records.length)rows.push(`<div class="meal-row empty"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>未记录</p></div><div class="meal-history-actions"><button data-add-today-type="${type}">记录</button><button data-skip-today-type="${type}">未吃</button></div></div>`);else rows.push(...records.map(x=>x.status==='skipped'?`<div class="meal-row empty skipped"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>本餐未吃 · 已确认</p></div><button data-delete-meal="${x.id}">撤销</button></div>`:`<div class="meal-row"><span class="meal-emoji ${type==='早餐'?'breakfast':type==='午餐'?'lunch':'dinner'}">${type==='早餐'?'☀':type==='午餐'?'◐':'☾'}</span><div><strong>${type}</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.proteinKnown===false?'蛋白质未知':`${x.protein}g蛋白质`}</small></span><button data-delete-meal="${x.id}">×</button></div>`))}const other=meals.filter(x=>normalizeClientMealType(x.type)==='其他摄入');rows.push(...other.map(x=>`<div class="meal-row"><span class="meal-emoji snack">◇</span><div><strong>其他摄入</strong><p>${escapeHtml(x.name)}${x.amount?` · ${x.amount}${escapeHtml(x.unit==='serving'?'份':x.unit||'g')}`:''}</p></div><span><strong>${x.calories}</strong><small>kcal · ${x.proteinKnown===false?'蛋白质未知':`${x.protein}g蛋白质`}</small></span><button data-delete-meal="${x.id}">×</button></div>`));list.innerHTML=rows.join('');
   $$('[data-add-today-type]').forEach(button=>button.onclick=()=>openMealRecord(localDateKey(),button.dataset.addTodayType));
   $$('[data-skip-today-type]').forEach(button=>button.onclick=()=>markMealSkipped(localDateKey(),button.dataset.skipTodayType));
   $$('[data-delete-meal]').forEach(b=>b.onclick=()=>{userData.mealLogs=userData.mealLogs.filter(x=>x.id!==b.dataset.deleteMeal);saveUser();hydrateApp();showToast('这条饮食记录已删除')});
@@ -478,9 +495,10 @@ $('#manualMealForm').addEventListener('submit',e=>{
   e.preventDefault();const f=new FormData(e.target),date=String(f.get('date')||localDateKey()),recordedAt=new Date().toISOString(),isBackfill=date<localDateKey(),editingId=e.target.dataset.editingId,existing=editingId?userData.mealLogs.find(x=>x.id===editingId):null,log={id:editingId||(crypto.randomUUID?crypto.randomUUID():String(Date.now())),date,type:f.get('type'),name:f.get('name'),amount:+f.get('grams')||null,unit:f.get('unit')||'g',calories:+f.get('calories'),protein:+f.get('protein')||0,source:isBackfill?'manual_backfill':'manual',recordedAt,createdAt:existing?.createdAt||recordedAt};
   if(existing?.nutritionSource&&existing.nutritionSource!==e.target.dataset.nutritionSource){
     const changed=['name','calories','protein','amount','unit'].some(key=>existing[key]!==log[key]);
-    if(changed){for(const key of ['nutritionSource','nutritionSourceUrl','referenceId','referenceLabel'])delete existing[key];existing.proteinKnown=e.target.elements.protein.value!==''}else log.source=existing.source;
+    if(changed){for(const key of ['nutritionSource','nutritionSourceUrl','referenceId','referenceLabel','packagedLabel'])delete existing[key];existing.proteinKnown=e.target.elements.protein.value!==''}else log.source=existing.source;
   }
   if(e.target.dataset.nutritionSource==='TFDA')Object.assign(log,{nutritionSource:'TFDA',nutritionSourceUrl:e.target.dataset.nutritionSourceUrl,referenceId:e.target.dataset.matchedReference,referenceLabel:e.target.dataset.referenceLabel,proteinKnown:e.target.dataset.proteinPer100!==''});
+  if(e.target.dataset.nutritionSource==='PACKAGED_LABEL'){const product=JSON.parse(e.target.dataset.packagedProduct);Object.assign(log,{nutritionSource:'PACKAGED_LABEL',referenceId:product.barcode,referenceLabel:product.name,proteinKnown:product.nutrients.protein!=null,packagedLabel:product,source:'包装标签确认'});}
   if(existing)Object.assign(existing,log);else userData.mealLogs.push(log);state.mealHistoryDate=date;saveUser();rememberAgent('meal_confirmed',{name:log.name,calories:log.calories,protein:log.protein,mealType:log.type,source:log.source});e.target.reset();delete e.target.dataset.editingId;clearMealNutritionState(e.target);e.target.querySelector('[type="submit"]').textContent='保存并让Agent更新计划';state.activeMealType='';state.activeMealDayOffset=0;closeModals();hydrateApp();addTrace('✓',`${editingId?'修改':isBackfill?'补登':'记录'}${dateDisplay(date)}饮食`,'save_meal_log',`${log.name} · ${log.amount||'?'}${log.unit==='serving'?'份':log.unit} · ${log.calories} kcal`);showToast(`${dateDisplay(date)}饮食已${editingId?'修改':'保存'}${isBackfill&&!editingId?'（补登）':''}`);
 });
 
@@ -608,7 +626,7 @@ if(DEMO_MODE){
     forget(){clearTimeout(serverSyncTimer);accountReady=false;userData=null;agentEventSource?.close();localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(STORAGE_KEY+'_sync');localStorage.removeItem(pendingKey())}
   });
 }
-$('#cancelOnboarding').addEventListener('click',()=>{$('#onboarding').classList.add('hidden');window.XiaofanCatalog?.takeSelection();switchView('catalog')});
+$('#cancelOnboarding').addEventListener('click',()=>{pendingPackagedOpen=false;$('#onboarding').classList.add('hidden');window.XiaofanCatalog?.takeSelection();switchView('catalog')});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 const adjustGoalForm=$('#adjustGoalForm');
@@ -712,9 +730,9 @@ async function lookupDatasetNutrition(query){
   }
 }
 $('#lookupNutritionBtn').addEventListener('click',()=>{const name=$('#manualMealForm').elements.name.value.trim();if(name)lookupDatasetNutrition(name);else{$('#nutritionLookupStatus').textContent='请先填写食物名称'}});
-function recalculateBarcodeNutrition(){const form=$('#manualMealForm'),amount=+form.elements.grams.value||0,kcal=Number(form.dataset.kcalPer100),protein=Number(form.dataset.proteinPer100);form.elements.calories.value=form.dataset.kcalPer100===''?'':Math.round(kcal*amount/100);form.elements.protein.value=form.dataset.proteinPer100===''?'':(protein*amount/100).toFixed(1)}
+function recalculateBarcodeNutrition(){const packageForm=$('#manualMealForm');if(packageForm.dataset.packagedProduct){const p=JSON.parse(packageForm.dataset.packagedProduct),unit=packageForm.elements.unit.value,amount=Number(packageForm.elements.grams.value);let base=amount;if(unit!==p.basisUnit){if(!p.servingAmount){packageForm.elements.calories.value='';packageForm.elements.protein.value='';return}if(unit==='serving'&&p.basisUnit===p.servingUnit)base*=p.servingAmount;else if(p.basisUnit==='serving'&&unit===p.servingUnit)base/=p.servingAmount;else{packageForm.elements.calories.value='';packageForm.elements.protein.value='';return}}const ratio=base/p.basisAmount;packageForm.elements.calories.value=(p.nutrients.kcal*ratio).toFixed(2);packageForm.elements.protein.value=p.nutrients.protein==null?'':(p.nutrients.protein*ratio).toFixed(2);return}const form=$('#manualMealForm'),amount=+form.elements.grams.value||0,kcal=Number(form.dataset.kcalPer100),protein=Number(form.dataset.proteinPer100);form.elements.calories.value=form.dataset.kcalPer100===''?'':Math.round(kcal*amount/100);form.elements.protein.value=form.dataset.proteinPer100===''?'':(protein*amount/100).toFixed(1)}
 $('#manualMealForm').elements.grams.addEventListener('input',()=>{if($('#manualMealForm').dataset.nutritionBasis)recalculateBarcodeNutrition()});
-$('#manualMealForm').elements.unit.addEventListener('change',()=>{const form=$('#manualMealForm');if(form.dataset.nutritionBasis&&form.elements.unit.value!=='g'){clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';$('#nutritionLookupStatus').textContent='食药署数据按克计算，改用其他单位后请手动填写营养值。'}});
+$('#manualMealForm').elements.unit.addEventListener('change',()=>{const form=$('#manualMealForm');if(form.dataset.packagedProduct){recalculateBarcodeNutrition();return}if(form.dataset.nutritionBasis&&form.elements.unit.value!=='g'){clearMealNutritionState(form);form.elements.calories.value='';form.elements.protein.value='';$('#nutritionLookupStatus').textContent='食药署数据按克计算，改用其他单位后请手动填写营养值。'}});
 $('#manualMealForm').elements.name.addEventListener('input',()=>{const form=$('#manualMealForm');clearMealNutritionState(form);$('#nutritionLookupStatus').textContent='';form.elements.calories.value='';form.elements.protein.value=''});
 for(const field of ['calories','protein'])$('#manualMealForm').elements[field].addEventListener('input',()=>clearMealNutritionState($('#manualMealForm')));
 

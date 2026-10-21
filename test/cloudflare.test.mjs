@@ -10,7 +10,7 @@ import {sqlStatements} from '../scripts/sql-statements.mjs';
 test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化和资源隔离',async t=>{
   const persist=await mkdtemp(join(tmpdir(),'xiaofan-d1-'));
   let recipeModelCalls=0;
-  const options={modules:true,scriptPath:new URL('../dist/_worker.js',import.meta.url).pathname,compatibilityDate:'2026-10-16',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'test-db'},resourcePersistencePath:persist,bindings:{DASHSCOPE_API_KEY:'test-key'},outboundService:async request=>{const payload=await request.json();if(JSON.stringify(payload.messages||[]).includes('根据以下真实可用食材')){assert.equal(payload.model,'qwen3.7-flash');assert.equal(payload.enable_thinking,false);recipeModelCalls++;return Response.json({choices:[{message:{content:JSON.stringify({name:'番茄鸡胸肉',ingredients:[{name:'去皮清肉平均值',grams:recipeModelCalls===1?150:180},{name:'红番茄',grams:150}],steps:['将去皮清肉平均值切片，红番茄切块。','锅中加入水，放入去皮清肉平均值和红番茄加热至鸡肉全熟。'],minutes:15,waterMl:30})}}]})}return Response.json({data:[{embedding:[1,0,0]}],choices:[{message:{content:JSON.stringify({answer:'营养查询已完成',intent:'nutrition',action:{type:'none'}})}}]})},serviceBindings:{ASSETS:()=>new Response('public asset')}};
+  const options={modules:true,scriptPath:new URL('../dist/_worker.js',import.meta.url).pathname,compatibilityDate:'2026-10-16',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'test-db'},resourcePersistencePath:persist,bindings:{DASHSCOPE_API_KEY:'test-key'},outboundService:async request=>{const payload=await request.json();if(payload.messages?.[0]?.content?.includes('包装标签文字转录'))return Response.json({choices:[{message:{content:JSON.stringify({name:'识别商品',basisUnit:'ml',basisAmount:100,energyUnit:'kJ',energy:167.36,protein:3,fat:1,carbs:5})}}]});if(JSON.stringify(payload.messages||[]).includes('根据以下真实可用食材')){assert.equal(payload.model,'qwen3.7-flash');assert.equal(payload.enable_thinking,false);recipeModelCalls++;return Response.json({choices:[{message:{content:JSON.stringify({name:'番茄鸡胸肉',ingredients:[{name:'去皮清肉平均值',grams:recipeModelCalls===1?150:180},{name:'红番茄',grams:150}],steps:['将去皮清肉平均值切片，红番茄切块。','锅中加入水，放入去皮清肉平均值和红番茄加热至鸡肉全熟。'],minutes:15,waterMl:30})}}]})}return Response.json({data:[{embedding:[1,0,0]}],choices:[{message:{content:JSON.stringify({answer:'营养查询已完成',intent:'nutrition',action:{type:'none'}})}}]})},serviceBindings:{ASSETS:()=>new Response('public asset')}};
   let mf=new Miniflare(convertV4MiniflareOptions(options));
   async function call(path,{method,body,cookie,version,headers={}}={}){
     const response=await mf.dispatchFetch('https://xiaofan.test'+path,{method:method||(body===undefined?'GET':'POST'),headers:{'Content-Type':'application/json','X-Requested-With':'Xiaofan',...(cookie?{Cookie:cookie}:{}),...(version===undefined?{}:{'X-State-Version':String(version)}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
@@ -53,6 +53,13 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     assert.equal((await call('/api/health')).data.seedRecipeCount,20);
     const bob=await call('/api/device/session',{body:{}});
     assert.equal(bob.status,201,JSON.stringify(bob.data));
+
+    const packagedInput={barcode:'3017620422003',name:'测试包装',basisAmount:100,basisUnit:'g',energyUnit:'kJ',energy:2092,protein:null,fat:20,carbs:65,confirmed:true};
+    assert.equal((await call('/api/packaged-foods',{cookie,body:packagedInput})).status,200);
+    assert.equal((await call('/api/nutrition/barcode/3017620422003',{cookie})).data.product.nutrients.kcal,500);
+    assert.equal((await call('/api/nutrition/barcode/3017620422003',{cookie:bob.cookie})).status,404);
+    const label=await call('/api/packaged-foods/label',{cookie,body:{imageDataUrl:'data:image/jpeg;base64,AA=='}});assert.equal(label.status,200);assert.equal(label.data.draft.energyUnit,'kJ');assert.equal(label.data.requiresConfirmation,true);
+    assert.equal((await db.prepare('SELECT COUNT(*) n FROM packaged_foods').first()).n,1);
     const again=await call('/api/device/session',{body:{},cookie});assert.equal(again.status,200);assert.equal(again.data.device.id,alice.data.device.id);
     assert.equal((await call('/api/auth/login',{body:{username:'alice',password:'disabled'}})).status,410);
     assert.equal(health.data.nutritionSource,'TFDA');assert.equal(health.data.nutrientRecordCount,230152);
@@ -80,11 +87,13 @@ test('Pages 使用真实 workerd + D1：身份、原子同步、重启持久化�
     await mf.dispose();mf=new Miniflare(convertV4MiniflareOptions(options));
     assert.equal((await call('/api/recipes',{cookie})).data.total,21);
     assert.equal((await call('/api/recipes/diy',{cookie,body:diyInput})).data.result.recipe.id,generatedRecipeId);
+    assert.equal((await call('/api/nutrition/barcode/3017620422003',{cookie})).data.product.name,'测试包装');
     const restored=await call('/api/user/state',{cookie});
     assert.equal(restored.status,200);assert.equal(restored.data.stateVersion,2);assert.equal(restored.data.state.mealLogs.length,1);
     const cleared=await call('/api/device/clear',{cookie,body:{confirmation:'清空数据'}});
     assert.equal(cleared.status,200,JSON.stringify(cleared.data));
     assert.equal((await call('/api/user/state',{cookie})).status,401);
     assert.equal((await call('/api/user/state',{cookie:cleared.cookie})).data.state,null);
+    assert.equal((await (await mf.getD1Database('DB')).prepare('SELECT COUNT(*) n FROM packaged_foods').first()).n,0);
   }finally{await mf.dispose();await rm(persist,{recursive:true,force:true})}
 });

@@ -14,7 +14,8 @@ const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai'}).format(ne
 
 test('撤回健康页面和模块，原有导航、记餐与PWA资源仍完整',()=>{
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8'),sw=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
-  assert.doesNotMatch(html,/healthView|health-center|data-view="health"|name="carbs"/);
+  assert.doesNotMatch(html,/healthView|health-center|data-view="health"/);
+  assert.doesNotMatch(html.match(/<form id="manualMealForm">[\s\S]*?<\/form>/)?.[0]||'',/name="carbs"/);
   for(const name of ['today','week','agent','trend','meals'])assert.match(html,new RegExp(`data-view="${name}"`));
   for(const file of ['health-core.js','health-import.js','health-center.js','health-center.css']){assert.equal(existsSync(new URL(`../${file}`,import.meta.url)),false);assert.equal(sw.includes(file),false);}
   for(const path of sw.matchAll(/'\.\/([^']+)'/g))assert.equal(existsSync(new URL(`../${path[1]}`,import.meta.url)),true,path[1]);

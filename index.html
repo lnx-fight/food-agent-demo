@@ -17,15 +17,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=32" />
-  <link rel="stylesheet" href="pantry.css?v=32" />
-  <link rel="stylesheet" href="onboarding.css?v=32" />
-  <link rel="stylesheet" href="api.css?v=32" />
-  <link rel="stylesheet" href="record-status.css?v=32" />
-  <link rel="stylesheet" href="adaptive-plan.css?v=32" />
-  <link rel="stylesheet" href="account.css?v=32" />
-  <link rel="stylesheet" href="guest.css?v=32" />
-  <link rel="stylesheet" href="food-catalog.css?v=32" />
+  <link rel="stylesheet" href="packaged-foods.css?v=33" />
+  <link rel="stylesheet" href="styles.css?v=33" />
+  <link rel="stylesheet" href="pantry.css?v=33" />
+  <link rel="stylesheet" href="onboarding.css?v=33" />
+  <link rel="stylesheet" href="api.css?v=33" />
+  <link rel="stylesheet" href="record-status.css?v=33" />
+  <link rel="stylesheet" href="adaptive-plan.css?v=33" />
+  <link rel="stylesheet" href="account.css?v=33" />
+  <link rel="stylesheet" href="guest.css?v=33" />
+  <link rel="stylesheet" href="food-catalog.css?v=33" />
   <style>.demo-mode-banner[hidden]{display:none!important}</style>
 </head>
 <body class="public-mode">
@@ -78,7 +79,7 @@
 
       <p id="deviceConnectionStatus" class="device-connection-status" role="status" aria-live="polite"></p>
 <section class="view active" id="catalogView">  <div id="foodCatalog" class="food-catalog" aria-labelledby="foodCatalogTitle">
-    <header class="food-catalog-header"><div class="food-catalog-top"><span class="food-catalog-intro">按分类浏览，也可以直接搜索</span><span class="food-catalog-brand"><img src="xiaofan-icon.png" alt="" width="28" height="28">小饭</span></div><div class="food-catalog-heading"><div><h2 id="foodCatalogTitle">食物热量表</h2><p>认识每一餐，从知道它的营养开始。</p></div><span class="food-catalog-count" id="catalogTotal">食药署食品数据</span></div><form id="foodSearchForm" class="food-search" role="search"><span aria-hidden="true">⌕</span><input type="search" id="foodSearchInput" aria-label="搜索热量表" placeholder="请输入食品名称" maxlength="100"><button type="button" id="foodSearchClear" class="food-search-clear" aria-label="清空搜索">×</button><button type="submit">搜索</button></form><div class="food-catalog-subhead"><span>无需登录 · 无需填写个人资料</span><span>统一按每100克可食部展示</span></div></header>
+    <header class="food-catalog-header"><div class="food-catalog-top"><span class="food-catalog-intro">按分类浏览，也可以直接搜索</span><span class="food-catalog-brand"><img src="xiaofan-icon.png" alt="" width="28" height="28">小饭</span></div><div class="food-catalog-heading"><div><h2 id="foodCatalogTitle">食物热量表</h2><p>认识每一餐，从知道它的营养开始。</p></div><span class="food-catalog-count" id="catalogTotal">食药署食品数据</span></div><button type="button" class="secondary-btn" data-open-packaged>▥ 扫包装条码</button><form id="foodSearchForm" class="food-search" role="search"><span aria-hidden="true">⌕</span><input type="search" id="foodSearchInput" aria-label="搜索热量表" placeholder="请输入食品名称" maxlength="100"><button type="button" id="foodSearchClear" class="food-search-clear" aria-label="清空搜索">×</button><button type="submit">搜索</button></form><div class="food-catalog-subhead"><span>无需登录 · 无需填写个人资料</span><span>统一按每100克可食部展示</span></div></header>
     <div class="food-catalog-body"><nav id="foodCategories" class="food-categories" aria-label="食品分类"></nav><div class="food-list-pane"><h3 id="foodResultStatus" class="food-result-status" role="status" aria-live="polite"></h3><div id="foodResults" aria-busy="false"></div><nav class="food-pagination" aria-label="结果分页"><button type="button" id="foodPrevious" disabled>上一页</button><span id="foodPageStatus"></span><button type="button" id="foodNext" disabled>下一页</button></nav></div></div>
     <footer class="food-catalog-footer"><span>数据来源：<a href="https://data.gov.tw/dataset/8543" target="_blank" rel="noopener noreferrer">台湾食药署食品营养成分资料集 ↗</a> · 点击名称看详情，点击 ＋ 记录</span><p id="catalogAttribution"></p></footer>
   </div></section>
@@ -345,8 +346,34 @@
   </div>
 
   <div class="modal-backdrop" id="manualMealModal" aria-hidden="true">
-    <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="agent-orb small"></span><div><small>REAL NUTRITION LOOKUP</small><h2>记录一餐</h2><p>输入中文名称即可自动匹配 台湾食药署；支持简繁体名称和常见别名；未收录的整道菜会明确提示。</p></div></div><form id="manualMealForm"><label class="field-label">记录日期<input name="date" required type="date"></label><label class="field-label">记录类别<select name="type"><option value="早餐">早餐</option><option value="午餐">午餐</option><option value="晚餐">晚餐</option><option value="其他摄入">其他摄入（零食、饮料等）</option></select></label><label class="field-label">吃了什么？<input name="name" required placeholder="例如：米饭、肉粽、冷冻虾仁炒饭"></label><div class="form-row"><label>大约份量（g）<input name="grams" type="number" min="1" max="3000" value="100"></label><label>&nbsp;<button class="secondary-btn full lookup-btn" id="lookupNutritionBtn" aria-label="查询营养数据" type="button">查询营养数据</button></label></div><div id="nutritionLookupStatus" class="lookup-status"></div><p class="api-source">包装食品可直接按包装标签手动填写，数据库查询仅使用 台湾食药署。</p><div class="form-row"><label>热量（kcal）<input name="calories" required type="number" min="0" max="5000"></label><label>蛋白质（g）<input name="protein" type="number" min="0" max="300" value="0"></label></div><button class="primary-btn full" type="submit">保存并让Agent更新计划</button></form></div>
+    <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="agent-orb small"></span><div><small>REAL NUTRITION LOOKUP</small><h2>记录一餐</h2><p>输入中文名称即可自动匹配 台湾食药署；支持简繁体名称和常见别名；未收录的整道菜会明确提示。</p></div></div><button type="button" class="secondary-btn full" data-open-packaged>▥ 扫条码 / 补录包装食品</button><form id="manualMealForm"><label class="field-label">记录日期<input name="date" required type="date"></label><label class="field-label">记录类别<select name="type"><option value="早餐">早餐</option><option value="午餐">午餐</option><option value="晚餐">晚餐</option><option value="其他摄入">其他摄入（零食、饮料等）</option></select></label><label class="field-label">吃了什么？<input name="name" required placeholder="例如：米饭、肉粽、冷冻虾仁炒饭"></label><div class="form-row"><label>大约份量（g）<input name="grams" type="number" min="1" max="3000" value="100"></label><label>&nbsp;<button class="secondary-btn full lookup-btn" id="lookupNutritionBtn" aria-label="查询营养数据" type="button">查询营养数据</button></label></div><div id="nutritionLookupStatus" class="lookup-status"></div><p class="api-source">通用食品查询使用食药署；包装食品可扫码查询或拍营养标签补录。</p><div class="form-row"><label>热量（kcal）<input name="calories" required type="number" min="0" max="5000" step="any"></label><label>蛋白质（g）<input name="protein" type="number" min="0" max="300" step="any" value="0"></label></div><button class="primary-btn full" type="submit">保存并让Agent更新计划</button></form></div>
   </div>
+
+
+  <dialog id="packagedDialog" aria-labelledby="packagedTitle">
+    <button type="button" id="packagedClose" class="packaged-close" aria-label="关闭包装食品">×</button>
+    <h2 id="packagedTitle">包装食品</h2><p>先查条码，未收录时按营养标签补录。仅保存在你的使用空间。</p>
+    <label>商品条码<div class="packaged-inline"><input id="packagedCode" inputmode="numeric" maxlength="14" autocomplete="off" placeholder="输入条码下方8–14位数字"><button type="button" id="packagedLookup" class="primary-btn">查询</button></div></label>
+    <div class="packaged-actions"><button type="button" id="packagedCamera" class="secondary-btn">打开相机扫码</button><label class="secondary-btn">上传条码照片<input id="packagedBarcodePhoto" type="file" accept="image/*" hidden></label><button type="button" id="packagedStopCamera" hidden>停止相机</button></div>
+    <video id="packagedVideo" muted playsinline hidden></video>
+    <p id="packagedStatus" role="status" aria-live="polite"></p>
+    <details open><summary>核对或补录营养标签</summary>
+      <label class="secondary-btn packaged-label-photo">拍营养成分表<input id="packagedLabelPhoto" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label>
+      <p class="packaged-hint">标签照片将交给识别服务转录，不保存照片。也可直接手动填写。请核对是每100克、每100毫升还是每份。</p>
+      <form id="packagedForm">
+        <div class="form-row"><label>商品名称<input name="name" maxlength="100" required></label><label>品牌（选填）<input name="brand" maxlength="100"></label></div>
+        <div class="form-row"><label>标签基准量<input name="basisAmount" type="number" min="0.01" max="10000" step="any" value="100" required></label><label>基准单位<select name="basisUnit" required><option value="g">克</option><option value="ml">毫升</option><option value="serving">份</option></select></label></div>
+        <div class="form-row"><label>标签能量<input name="energy" type="number" min="0" max="50000" step="any" required></label><label>能量单位<select name="energyUnit" required><option value="">请选择</option><option value="kJ">千焦 kJ</option><option value="kcal">千卡 kcal</option></select></label></div>
+        <div class="form-row"><label>蛋白质（克）<input name="protein" type="number" min="0" step="any"></label><label>脂肪（克）<input name="fat" type="number" min="0" step="any"></label></div>
+        <div class="form-row"><label>碳水（克）<input name="carbs" type="number" min="0" step="any"></label><label>糖（克，选填）<input name="sugar" type="number" min="0" step="any"></label></div>
+        <div class="form-row"><label>钠（毫克，选填）<input name="sodiumMg" type="number" min="0" step="any"></label><label>纤维（克，选填）<input name="fiber" type="number" min="0" step="any"></label></div>
+        <div class="form-row"><label>标签注明每份重量（选填）<input name="servingAmount" type="number" min="0.01" max="10000" step="any"></label><label>每份重量单位<select name="servingUnit"><option value="g">克</option><option value="ml">毫升</option></select></label></div>
+        <label class="packaged-confirm"><input name="confirmed" type="checkbox" required> 我已核对商品、标签基准、单位及数值</label>
+        <button id="packagedSave" class="primary-btn full" type="submit">保存到我的商品库</button>
+      </form>
+    </details>
+    <section class="packaged-portion"><h3>这次实际吃了多少？</h3><div class="form-row"><label>食用量<input id="packagedAmount" type="number" min="0.01" max="10000" step="any" value="100"></label><label>单位<select id="packagedAmountUnit"><option value="g">克</option></select></label></div><p id="packagedPortionSummary" role="status"></p><button id="packagedRecord" type="button" class="primary-btn full" disabled>去确认记餐</button><small>不会默认吃完整袋，也不会自动添加饮食记录。</small></section>
+  </dialog>
 
   <div class="modal-backdrop" id="adjustGoalModal" aria-hidden="true">
     <div class="modal small-modal"><button class="modal-close" data-close-modal>×</button><div class="modal-head compact-head"><span class="agent-orb small"></span><div><small>AGENT REPLANNING</small><h2>调整减重目标</h2><p>已有体重和饮食记录会完整保留。</p></div></div><form id="adjustGoalForm"><div class="form-row"><label>目标体重（kg）<input name="targetWeight" required type="number" min="30" max="250" step="0.1"></label><label>计划天数<input name="planDays" required type="number" min="1" max="365" step="1"></label></div><label class="field-label">新的目标日期<input name="targetDate" required type="date"></label><div class="final-evaluation" id="adjustGoalPreview"></div><button class="primary-btn full" type="submit">保存并让 Agent 重新规划</button></form></div>
@@ -369,10 +396,12 @@
       <p id="accountPanelMessage" class="account-message" role="status"></p>
     </div>
   </div>
-  <script src="account-ui.js?v=32"></script>
-  <script src="guest-ui.js?v=32"></script>
-  <script src="food-catalog.js?v=32"></script>
-  <script src="app.js?v=32"></script>
-  <script src="adaptive-plan.js?v=32"></script>
+  <script src="account-ui.js?v=33"></script>
+  <script src="guest-ui.js?v=33"></script>
+  <script src="food-catalog.js?v=33"></script>
+  <script src="app.js?v=33"></script>
+  <script src="adaptive-plan.js?v=33"></script>
+  <script src="barcode-scanner.js?v=33" defer></script>
+  <script src="packaged-foods.js?v=33" defer></script>
 </body>
 </html>

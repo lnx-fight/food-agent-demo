@@ -13,6 +13,7 @@ export function createAccounts({db,json,readBody,getState,saveState,closeEvents=
     CREATE TABLE IF NOT EXISTS account_sessions(token_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL,created_at INTEGER NOT NULL,expires_at INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS account_session_owner ON account_sessions(account_id);
     CREATE TABLE IF NOT EXISTS write_guards(ok INTEGER NOT NULL CHECK(ok=1));
+    CREATE TABLE IF NOT EXISTS packaged_foods(owner_id TEXT NOT NULL,barcode TEXT NOT NULL,product TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(owner_id,barcode)) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS auth_attempts(bucket TEXT PRIMARY KEY,count INTEGER NOT NULL,expires_at INTEGER NOT NULL);`);
   const active=new Map();
   const account=async id=>(await db.prepare('SELECT * FROM accounts WHERE id=?').get(id));
@@ -46,7 +47,7 @@ export function createAccounts({db,json,readBody,getState,saveState,closeEvents=
     }
   }
   function purgeStatements(clientId){
-    const uid='(SELECT id FROM users WHERE client_id=?)',statements=[];
+    const uid='(SELECT id FROM users WHERE client_id=?)',statements=[['DELETE FROM packaged_foods WHERE owner_id=(SELECT id FROM accounts WHERE client_id=?)',[clientId]]];
     statements.push([`DELETE FROM memory_embeddings WHERE memory_id IN (SELECT id FROM agent_memory WHERE user_id=${uid})`,[clientId]]);
     statements.push([`DELETE FROM skill_embeddings WHERE skill_id IN (SELECT id FROM skills WHERE user_id=${uid})`,[clientId]]);
     statements.push([`DELETE FROM agent_goal_steps WHERE goal_id IN (SELECT id FROM agent_goals WHERE user_id=${uid})`,[clientId]]);
@@ -67,6 +68,7 @@ export function createAccounts({db,json,readBody,getState,saveState,closeEvents=
       result.records.skill_embeddings=(await db.prepare('SELECT * FROM skill_embeddings WHERE skill_id IN (SELECT id FROM skills WHERE user_id=?)').all(user.id));
       result.archivedAppState=JSON.parse(user.app_state||'{}');
     }
+    result.records.packaged_foods=await db.prepare('SELECT barcode,product,updated_at FROM packaged_foods WHERE owner_id=?').all(row.id);
     result.records.agent_logs=(await db.prepare('SELECT * FROM agent_logs WHERE client_id=?').all(row.client_id));
     return result;
   }
